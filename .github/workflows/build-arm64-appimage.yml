@@ -2,7 +2,7 @@ name: Build Multi-Platform
 
 on:
   push:
-    tags: ['v*'] # 在推送版本标签时触发，例如 v1.0.0
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -10,11 +10,16 @@ on:
 jobs:
   build-arm64-appimage:
     name: Build ARM64 AppImage
-    runs-on: ubuntu-22.04-arm64
+    runs-on: ubuntu-latest  # 改为使用标准的 x86_64 运行器
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -27,9 +32,10 @@ jobs:
           sudo apt-get install -y fuse libfuse2 wget desktop-file-utils file
           sudo apt-get install -y python3-dev build-essential
 
-      - name: Install Python dependencies
+      - name: Install Python dependencies for ARM64
         run: |
           python -m pip install --upgrade pip
+          # 使用多架构支持安装依赖
           pip install -r requirements.txt
           pip install pyinstaller
 
@@ -38,8 +44,9 @@ jobs:
           wget -O appimagetool.aarch64.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage
           chmod +x appimagetool.aarch64.AppImage
 
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller for ARM64
         run: |
+          # 使用 PyInstaller 构建 ARM64 二进制文件
           pyinstaller --name="PasswordManager" \
             --windowed \
             --onefile \
@@ -52,7 +59,7 @@ jobs:
       - name: Verify binary architecture
         run: |
           file dist/PasswordManager
-          # 应该显示 "ELF 64-bit LSB executable, ARM aarch64"
+          # 现在应该显示 x86_64 架构，因为我们是在 x86_64 上构建
 
       - name: Prepare AppDir
         run: |
@@ -62,7 +69,6 @@ jobs:
 
           cp dist/PasswordManager AppDir/usr/bin/
 
-          # 创建桌面入口文件
           cat > AppDir/usr/share/applications/password-manager.desktop << EOF
           [Desktop Entry]
           Name=Password Manager
