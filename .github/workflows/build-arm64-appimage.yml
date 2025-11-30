@@ -1,23 +1,16 @@
-name: Build ARM64 AppImage
+name: Build Multi-Platform
 
 on:
   push:
     tags: ['v*'] # 在推送版本标签时触发，例如 v1.0.0
   pull_request:
     branches: [main]
-  # 你也可以手动触发工作流
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build Python AppImage for ARM64
-    runs-on: ubuntu-latest # 工作流控制环境，构建任务将在ARM64运行器执行
-    strategy:
-      matrix:
-        # 使用 GitHub 托管的 ARM64 运行器
-        include:
-          - arch: arm64
-            runner: ubuntu-latest
+  build-arm64-appimage:
+    name: Build ARM64 AppImage
+    runs-on: ubuntu-22.04-arm64
 
     steps:
       - name: Checkout repository
@@ -31,24 +24,22 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          # 安装必要的系统工具和库，包括FUSE（AppImage所需）[citation:4]
-          sudo apt-get install -y fuse libfuse2 wget desktop-file-utils
+          sudo apt-get install -y fuse libfuse2 wget desktop-file-utils file
+          sudo apt-get install -y python3-dev build-essential
 
       - name: Install Python dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # 确保PyInstaller已安装
           pip install pyinstaller
 
       - name: Download ARM64 appimagetool
         run: |
-          # 下载适用于aarch64（ARM64）的appimagetool[citation:2]
           wget -O appimagetool.aarch64.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage
           chmod +x appimagetool.aarch64.AppImage
 
       - name: Build with PyInstaller
         run: |
-          # 使用PyInstaller打包应用，注意指定目标架构
           pyinstaller --name="PasswordManager" \
             --windowed \
             --onefile \
@@ -56,8 +47,12 @@ jobs:
             --add-data="core/*.py:core" \
             --add-data="models/*.py:models" \
             --add-data="utils/*.py:utils" \
-            --target-architecture=arm64 \
             main.py
+
+      - name: Verify binary architecture
+        run: |
+          file dist/PasswordManager
+          # 应该显示 "ELF 64-bit LSB executable, ARM aarch64"
 
       - name: Prepare AppDir
         run: |
@@ -65,11 +60,7 @@ jobs:
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
 
-          # 将PyInstaller生成的可执行文件复制到AppDir
           cp dist/PasswordManager AppDir/usr/bin/
-
-          # 如果有应用图标，也复制过去
-          # cp icons/app_icon.png AppDir/usr/share/icons/hicolor/256x256/apps/password-manager.png
 
           # 创建桌面入口文件
           cat > AppDir/usr/share/applications/password-manager.desktop << EOF
@@ -86,26 +77,76 @@ jobs:
 
       - name: Create AppImage
         run: |
-          # 使用appimagetool打包AppDir为AppImage
-          ./appimagetool.aarch64.AppImage AppDir
-
-          # 重命名生成的AppImage，包含架构和版本信息
-          VERSION=${GITHUB_REF#refs/tags/v} # 从标签提取版本
-          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF" ]; then
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
             VERSION="latest"
           fi
+          
+          ./appimagetool.aarch64.AppImage AppDir
           mv PasswordManager-*-aarch64.AppImage PasswordManager-${VERSION}-aarch64.AppImage
 
-      - name: Upload AppImage artifact
+      - name: Upload ARM64 AppImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PasswordManager-ARM64
+          name: PasswordManager-ARM64-AppImage
           path: PasswordManager-*-aarch64.AppImage
           retention-days: 30
 
-      - name: Upload to Release (on tag push)
-        # 仅在推送标签时，将AppImage附加到GitHub Release
+      - name: Upload ARM64 AppImage to Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           files: PasswordManager-*-aarch64.AppImage
+
+  build-x64-exe:
+    name: Build x86_64 Windows EXE
+    runs-on: windows-latest  # 使用Windows运行器构建EXE
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --name="PasswordManager" `
+            --windowed `
+            --onefile `
+            --add-data="gui/*.py;gui" `
+            --add-data="core/*.py;core" `
+            --add-data="models/*.py;models" `
+            --add-data="utils/*.py;utils" `
+            main.py
+
+      - name: Rename output with version
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $VERSION = $env:GITHUB_REF -replace "refs/tags/v", ""
+          } else {
+            $VERSION = "latest"
+          }
+          Copy-Item "dist/PasswordManager.exe" "dist/PasswordManager-${VERSION}-x64.exe"
+
+      - name: Upload x64 EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PasswordManager-x64-EXE
+          path: dist/PasswordManager-*-x64.exe
+          retention-days: 30
+
+      - name: Upload x64 EXE to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/PasswordManager-*-x64.exe
