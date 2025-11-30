@@ -1,0 +1,93 @@
+/* 详情显示样式 */
+body {
+    font-family: 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+.card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    overflow: hidden;
+    margin-bottom: 20px;
+    transition: transform 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.card-header {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    padding: 15px 20px;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.detail-row {
+    display: flex;
+    margin-bottom: 12px;
+    align-items: flex-start;
+}
+
+.detail-label {
+    flex: 0 0 120px;
+    font-weight: 600;
+    color: #495057;
+    margin-right: 10px;
+}
+
+.detail-value {
+    flex: 1;
+    color: #212529;
+    word-break: break-word;
+}
+
+.empty-field {
+    color: #6c757d;
+    font-style: italic;
+}
+
+.notes-card .card-header {
+    background: linear-gradient(135deg, #17a2b8, #138496);
+}
+
+.notes-content {
+    white-space: pre-wrap;
+    line-height: 1.5;
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #17a2b8;
+}
+
+.icon {
+    margin-right: 8px;
+    font-size: 14px;
+}
+
+.category-badge {
+    background: #e9ecef;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    display: inline-block;
+}
+
+.no-selection {
+    text-align: center;
+    color: #6c757d;
+    padding: 50px;
+}
+
+.no-selection h3 {
+    margin-bottom: 10px;
+}

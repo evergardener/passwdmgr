@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QTextEdit, QStatusBar,
                              QToolBar, QMessageBox, QSplitter, QLabel, QApplication, QDialog)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QAction
 
 from core.database_manager import DatabaseManager
@@ -18,9 +18,12 @@ from core.encryption_manager import EncryptionManager
 from core.config_manager import ConfigManager
 from core.session_manager import SessionManager
 from core.password_generator import PasswordGenerator
+from core.resource_manager import get_resource_manager
 from gui.login_dialog import LoginDialog
 from gui.settings_dialog import SettingsDialog
 from gui.add_edit_dialog import AddEditDialog
+from gui.icon_manager import get_icon_manager
+from gui.menu_manager import MenuManager
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +39,31 @@ class MainWindow(QMainWindow):
         self.encryption_manager = EncryptionManager()
         self.password_generator = PasswordGenerator()
 
+
+        # 资源管理器
+        self.resource_manager = get_resource_manager()
+        # 图标管理器
+        self.icon_manager = get_icon_manager()
+
+        # 菜单管理器
+        self.menu_manager = MenuManager(self.icon_manager)
+
         # 当前选中的条目
         self.current_entry = None
+
+        # 加载模板
+        self.detail_template = self.load_detail_template()
 
         self.setup_ui()
         self.setup_menu()
         self.setup_toolbar()
         self.setup_signals()
+
+        # 设置窗口图标
+        self.setup_icons()
+
+        # 检查菜单图标可用性
+        self.check_menu_icon_availability()
 
         # 自动锁定定时器
         self.auto_lock_timer = QTimer()
@@ -55,6 +76,177 @@ class MainWindow(QMainWindow):
 
         # 尝试连接数据库
         self.connect_to_database()
+
+    def load_detail_template(self):
+        """加载详情模板"""
+        template = self.resource_manager.get_template("detail_template.html")
+        if template is None:
+            # 如果模板文件不存在，使用内联的默认模板
+            template = self.get_default_detail_template()
+            print("使用默认详情模板")
+        else:
+            print("详情模板加载成功")
+        return template
+
+    def get_default_detail_template(self):
+        """获取默认的详情模板（备用）"""
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="UTF-8">
+        <style>
+            body {
+                font-family: 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                margin: 0;
+                padding: 20px;
+                min-height: 100vh;
+            }
+            .card {
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+                overflow: hidden;
+                margin-bottom: 20px;
+            }
+            .card-header {
+                background: linear-gradient(135deg, #007bff, #0056b3);
+                color: white;
+                padding: 15px 20px;
+                font-weight: 600;
+                font-size: 16px;
+            }
+            .card-body {
+                padding: 20px;
+            }
+            .detail-row {
+                display: flex;
+                margin-bottom: 12px;
+                align-items: flex-start;
+            }
+            .detail-label {
+                flex: 0 0 120px;
+                font-weight: 600;
+                color: #495057;
+                margin-right: 10px;
+            }
+            .detail-value {
+                flex: 1;
+                color: #212529;
+                word-break: break-word;
+            }
+            .empty-field {
+                color: #6c757d;
+                font-style: italic;
+            }
+            .notes-card .card-header {
+                background: linear-gradient(135deg, #17a2b8, #138496);
+            }
+            .notes-content {
+                white-space: pre-wrap;
+                line-height: 1.5;
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 8px;
+                border-left: 4px solid #17a2b8;
+            }
+            .icon {
+                margin-right: 8px;
+                font-size: 14px;
+            }
+            .category-badge {
+                background: #e9ecef;
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 12px;
+                display: inline-block;
+            }
+            .no-selection {
+                text-align: center;
+                color: #6c757d;
+                padding: 50px;
+            }
+        </style>
+        </head>
+        <body>
+            <div id="no-selection" class="no-selection">
+                <h3>📋 密码详情</h3>
+                <p>请从左侧列表选择一个密码条目查看详情</p>
+            </div>
+            <div id="detail-content" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="icon">🔐</span> 基本信息
+                    </div>
+                    <div class="card-body">
+                        <div class="detail-row">
+                            <div class="detail-label">网站名称</div>
+                            <div class="detail-value" id="website-name"></div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">URL</div>
+                            <div class="detail-value" id="url"></div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">用户名</div>
+                            <div class="detail-value" id="username"></div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">分类</div>
+                            <div class="detail-value">
+                                <span class="category-badge" id="category"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="icon">⏰</span> 时间信息
+                    </div>
+                    <div class="card-body">
+                        <div class="detail-row">
+                            <div class="detail-label">创建时间</div>
+                            <div class="detail-value" id="created-at"></div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">更新时间</div>
+                            <div class="detail-value" id="updated-at"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header notes-card">
+                        <span class="icon">📝</span> 备注
+                    </div>
+                    <div class="card-body">
+                        <div class="notes-content" id="notes"></div>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+    def setup_icons(self):
+        """设置图标"""
+        # 设置窗口图标
+        success = self.icon_manager.set_window_icon(self, "favicon")
+
+        if not success:
+            # 如果 favicon 失败，尝试其他可能的图标名称
+            alternative_names = ["icon", "app", "logo", "password", "lock"]
+            for name in alternative_names:
+                if self.icon_manager.set_window_icon(self, name):
+                    print(f"使用备选图标: {name}")
+                    break
+            else:
+                print("警告: 无法设置任何窗口图标")
+
+        # 设置应用程序图标（影响任务栏等）
+        app_icon = self.icon_manager.get_icon("favicon")
+        if not app_icon.isNull():
+            QApplication.setWindowIcon(app_icon)
 
     def setup_ui(self):
         """初始化UI界面"""
@@ -129,7 +321,7 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("就绪")
 
-    def setup_menu(self):
+    def setup_menu_without_icons(self):
         """设置菜单栏"""
         menubar = self.menuBar()
 
@@ -139,6 +331,10 @@ class MainWindow(QMainWindow):
         self.lock_action = QAction("锁定", self)  # 初始状态为"锁定"
         self.sync_action = QAction("同步", self)
         self.exit_action = QAction("退出", self)
+
+        # 为菜单项设置图标
+        self.lock_action.setIcon(self.icon_manager.get_icon("lock"))
+        self.sync_action.setIcon(self.icon_manager.get_icon("sync"))
 
         file_menu.addAction(self.sync_action)
         file_menu.addAction(self.lock_action)
@@ -152,6 +348,11 @@ class MainWindow(QMainWindow):
         self.edit_action = QAction("编辑", self)
         self.delete_action = QAction("删除", self)
 
+        # 为编辑菜单项设置图标
+        self.add_action.setIcon(self.icon_manager.get_icon("add"))
+        self.edit_action.setIcon(self.icon_manager.get_icon("edit"))
+        self.delete_action.setIcon(self.icon_manager.get_icon("delete"))
+
         edit_menu.addAction(self.add_action)
         edit_menu.addAction(self.edit_action)
         edit_menu.addAction(self.delete_action)
@@ -164,6 +365,12 @@ class MainWindow(QMainWindow):
         self.change_password_action = QAction("修改主密码", self)
         self.settings_action = QAction("设置", self)
 
+        # 为工具菜单项设置图标
+        self.generate_password_action.setIcon(self.icon_manager.get_icon("key"))
+        self.manage_categories_action.setIcon(self.icon_manager.get_icon("category"))
+        self.change_password_action.setIcon(self.icon_manager.get_icon("admin_password"))
+        self.settings_action.setIcon(self.icon_manager.get_icon("settings"))
+
         tools_menu.addAction(self.generate_password_action)
         tools_menu.addAction(self.manage_categories_action)
         tools_menu.addAction(self.change_password_action)
@@ -172,37 +379,357 @@ class MainWindow(QMainWindow):
         # 根据初始锁定状态更新菜单文本
         self.update_lock_action_text()
 
-    def update_lock_action_text(self):
-        """根据锁定状态更新锁定/解锁菜单项文本"""
+    def setup_menu_old(self):
+        """设置菜单栏 - 修复对齐和图标重复问题"""
+        menubar = self.menuBar()
+
+        # 设置菜单栏样式
+        menubar.setStyleSheet("""
+            QMenuBar {
+                background-color: #f8f9fa;
+                border-bottom: 1px solid #dee2e6;
+                spacing: 8px;
+            }
+            QMenuBar::item {
+                background-color: transparent;
+                padding: 8px 16px;
+                border-radius: 4px;
+                margin: 1px;
+                font-weight: 500;
+            }
+            QMenuBar::item:selected {
+                background-color: #e3f2fd;
+                color: #1565c0;
+            }
+            QMenuBar::item:pressed {
+                background-color: #bbdefb;
+            }
+            QMenu {
+                background-color: white;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 6px 24px 6px 12px;
+                margin: 2px;
+                border-radius: 3px;
+            }
+            QMenu::item:selected {
+                background-color: #e3f2fd;
+                color: #1565c0;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #dee2e6;
+                margin: 4px 8px;
+            }
+        """)
+
+        # 文件菜单
+        file_menu = menubar.addMenu("📁 文件")
+
+
+        # 同步动作
+        self.sync_action = QAction("同步", self)
+        self.icon_manager.setup_menu_action(self.sync_action, "sync", "同步")
+
+        # 锁定/解锁动作
+        self.lock_action = QAction("解锁", self)
+        # 初始状态为锁定，所以显示解锁图标
         if self.session_manager.is_locked:
+            self.icon_manager.setup_menu_action(self.lock_action, "unlock", "解锁")
+        else:
+            self.icon_manager.setup_menu_action(self.lock_action, "lock", "锁定")
+
+        # 退出动作 - 确保有图标
+        self.exit_action = QAction("退出", self)
+        self.icon_manager.setup_menu_action(self.exit_action, "exit", "退出")
+        # 如果退出图标不存在，使用默认图标
+        exit_icon = self.icon_manager.get_icon("exit")
+        if exit_icon.isNull():
+            # 尝试其他可能的退出图标名称
+            exit_icon = self.icon_manager.get_icon("quit")
+            if exit_icon.isNull():
+                exit_icon = self.icon_manager.get_icon("close")
+                if exit_icon.isNull():
+                    # 如果都没有，使用系统标准图标
+                    from PyQt6.QtGui import QIcon
+                    from PyQt6.QtWidgets import QStyle
+                    exit_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton)
+
+        if not exit_icon.isNull():
+            self.exit_action.setIcon(exit_icon)
+
+        file_menu.addAction(self.sync_action)
+        file_menu.addAction(self.lock_action)
+        file_menu.addSeparator()
+        file_menu.addAction(self.exit_action)
+
+        # 编辑菜单
+        edit_menu = menubar.addMenu("✏️ 编辑")
+
+        self.add_action = QAction("添加", self)
+        self.edit_action = QAction("编辑", self)
+        self.delete_action = QAction("删除", self)
+
+        # 为编辑菜单项设置图标
+        self.icon_manager.setup_menu_action(self.add_action, "add", "添加")
+        self.icon_manager.setup_menu_action(self.edit_action, "edit", "编辑")
+        self.icon_manager.setup_menu_action(self.delete_action, "delete", "删除")
+
+        edit_menu.addAction(self.add_action)
+        edit_menu.addAction(self.edit_action)
+        edit_menu.addAction(self.delete_action)
+
+        # 工具菜单
+        tools_menu = menubar.addMenu("🛠️ 工具")
+
+        self.generate_password_action = QAction("生成密码", self)
+        self.manage_categories_action = QAction("管理分类", self)
+        self.change_password_action = QAction("修改主密码", self)
+        self.settings_action = QAction("设置", self)
+
+        # 为工具菜单项设置图标
+        self.icon_manager.setup_menu_action(self.generate_password_action, "key", "生成密码")
+        self.icon_manager.setup_menu_action(self.manage_categories_action, "category", "管理分类")
+        self.icon_manager.setup_menu_action(self.change_password_action, "admin_password", "修改主密码")
+        self.icon_manager.setup_menu_action(self.settings_action, "settings", "设置")
+
+        tools_menu.addAction(self.generate_password_action)
+        tools_menu.addAction(self.manage_categories_action)
+        tools_menu.addAction(self.change_password_action)
+        tools_menu.addAction(self.settings_action)
+
+        # 初始状态为锁定，所以编辑功能应该禁用
+        self.add_action.setEnabled(False)
+        self.edit_action.setEnabled(False)
+        self.delete_action.setEnabled(False)
+
+    def setup_menu(self):
+        """设置菜单栏 - 使用菜单管理器"""
+        menubar = self.menuBar()
+
+        # 设置菜单栏样式（同上）
+        menubar.setStyleSheet("""
+            QMenuBar {
+                background-color: #f8f9fa;
+                border-bottom: 1px solid #dee2e6;
+                spacing: 8px;
+                font-weight: 500;
+            }
+            QMenuBar::item {
+                background-color: transparent;
+                padding: 8px 16px;
+                border-radius: 4px;
+                margin: 1px;
+            }
+            QMenuBar::item:selected {
+                background-color: #e3f2fd;
+                color: #1565c0;
+            }
+            QMenuBar::item:pressed {
+                background-color: #bbdefb;
+            }
+        """)
+
+        # 文件菜单
+        file_menu_data = [
+            {
+                'text': '同步',
+                'icon': 'sync',
+                'enabled': True
+            },
+            {
+                'text': '解锁' if self.session_manager.is_locked else '锁定',
+                'icon': 'unlock' if self.session_manager.is_locked else 'lock',
+                'enabled': True
+            },
+            {'separator': True},
+            {
+                'text': '退出',
+                'icon': 'exit',
+                'enabled': True
+            }
+        ]
+
+        file_menu = self.menu_manager.create_menu(self, "📁 文件", file_menu_data)
+        menubar.addMenu(file_menu)
+
+        # 获取文件菜单中的动作
+        self.sync_action = file_menu.actions()[0]
+        self.lock_action = file_menu.actions()[1]
+        self.exit_action = file_menu.actions()[3]  # 跳过分隔符
+
+        # 编辑菜单
+        edit_menu_data = [
+            {
+                'text': '添加',
+                'icon': 'add',
+                'enabled': not self.session_manager.is_locked
+            },
+            {
+                'text': '编辑',
+                'icon': 'edit',
+                'enabled': not self.session_manager.is_locked
+            },
+            {
+                'text': '删除',
+                'icon': 'delete',
+                'enabled': not self.session_manager.is_locked
+            }
+        ]
+
+        edit_menu = self.menu_manager.create_menu(self, "✏️ 编辑", edit_menu_data)
+        menubar.addMenu(edit_menu)
+
+        # 获取编辑菜单中的动作
+        self.add_action = edit_menu.actions()[0]
+        self.edit_action = edit_menu.actions()[1]
+        self.delete_action = edit_menu.actions()[2]
+
+        # 工具菜单
+        tools_menu_data = [
+            {
+                'text': '生成密码',
+                'icon': 'key',
+                'enabled': True
+            },
+            {
+                'text': '管理分类',
+                'icon': 'category',
+                'enabled': True
+            },
+            {
+                'text': '修改主密码',
+                'icon': 'admin_password',
+                'enabled': True
+            },
+            {
+                'text': '设置',
+                'icon': 'settings',
+                'enabled': True
+            }
+        ]
+
+        tools_menu = self.menu_manager.create_menu(self, "🛠️ 工具", tools_menu_data)
+        menubar.addMenu(tools_menu)
+
+        # 获取工具菜单中的动作
+        self.generate_password_action = tools_menu.actions()[0]
+        self.manage_categories_action = tools_menu.actions()[1]
+        self.change_password_action = tools_menu.actions()[2]
+        self.settings_action = tools_menu.actions()[3]
+
+    def update_lock_action_text(self):
+        """根据锁定状态更新锁定/解锁菜单项文本和图标"""
+        if self.session_manager.is_locked:
+            # 当前已锁定，显示解锁
             self.lock_action.setText("解锁")
-            # 锁定状态下禁用编辑相关功能
+            self.icon_manager.setup_menu_action(self.lock_action, "unlock", "解锁")
+            # 禁用编辑功能
             self.add_action.setEnabled(False)
             self.edit_action.setEnabled(False)
             self.delete_action.setEnabled(False)
-            self.copy_username_button.setEnabled(False)
-            self.copy_password_button.setEnabled(False)
-            self.show_password_button.setEnabled(False)
         else:
+            # 当前未锁定，显示锁定
             self.lock_action.setText("锁定")
-            # 解锁状态下启用编辑相关功能
+            self.icon_manager.setup_menu_action(self.lock_action, "lock", "锁定")
+            # 启用编辑功能
             self.add_action.setEnabled(True)
             self.edit_action.setEnabled(True)
             self.delete_action.setEnabled(True)
-            self.copy_username_button.setEnabled(True)
-            self.copy_password_button.setEnabled(True)
-            self.show_password_button.setEnabled(True)
-    def setup_toolbar(self):
+
+            # 更新工具栏按钮的状态
+        self.update_toolbar_lock_state()
+
+    def update_toolbar_lock_state(self):
+        """更新工具栏锁定状态"""
+        # 根据锁定状态启用/禁用相关功能
+        is_locked = self.session_manager.is_locked
+
+        # 更新编辑相关按钮的状态
+        self.add_action.setEnabled(not is_locked)
+        self.edit_action.setEnabled(not is_locked)
+        self.delete_action.setEnabled(not is_locked)
+        self.copy_username_button.setEnabled(not is_locked)
+        self.copy_password_button.setEnabled(not is_locked)
+        self.show_password_button.setEnabled(not is_locked)
+
+        # 更新状态栏提示
+        if is_locked:
+            self.status_bar.showMessage("应用程序已锁定")
+        else:
+            self.status_bar.showMessage("应用程序已解锁")
+
+    def setup_toolbar_without_icons(self):
         """设置工具栏"""
         toolbar = QToolBar("主工具栏")
         self.addToolBar(toolbar)
 
+        # 为工具栏按钮设置图标
+        self.add_action.setIcon(self.icon_manager.get_icon("add"))
+        self.edit_action.setIcon(self.icon_manager.get_icon("edit"))
+        self.delete_action.setIcon(self.icon_manager.get_icon("delete"))
         toolbar.addAction(self.add_action)
         toolbar.addAction(self.edit_action)
         toolbar.addAction(self.delete_action)
+
         toolbar.addSeparator()
+
+        self.sync_action.setIcon(self.icon_manager.get_icon("sync"))
+        self.lock_action.setIcon(self.icon_manager.get_icon("lock"))
+
         toolbar.addAction(self.sync_action)
         toolbar.addAction(self.lock_action)  # 工具栏按钮也会自动更新文本
+
+    def setup_toolbar(self):
+        """设置工具栏 - 修复图标重复问题"""
+        toolbar = QToolBar("主工具栏")
+        toolbar.setIconSize(QSize(20, 20))
+        self.addToolBar(toolbar)
+
+        # 为工具栏按钮设置图标
+        self.icon_manager.setup_menu_action(self.add_action, "add", "添加")
+        self.icon_manager.setup_menu_action(self.edit_action, "edit", "编辑")
+        self.icon_manager.setup_menu_action(self.delete_action, "delete", "删除")
+
+        toolbar.addAction(self.add_action)
+        toolbar.addAction(self.edit_action)
+        toolbar.addAction(self.delete_action)
+
+        toolbar.addSeparator()
+
+        # 同步动作
+        self.icon_manager.setup_menu_action(self.sync_action, "sync", "同步")
+        toolbar.addAction(self.sync_action)
+
+        # 锁定/解锁动作
+        if self.session_manager.is_locked:
+            self.icon_manager.setup_menu_action(self.lock_action, "unlock", "解锁")
+        else:
+            self.icon_manager.setup_menu_action(self.lock_action, "lock", "锁定")
+        toolbar.addAction(self.lock_action)
+
+        # 设置工具栏样式
+        toolbar.setStyleSheet("""
+            QToolBar {
+                background-color: #ffffff;
+                border-bottom: 1px solid #dee2e6;
+                spacing: 3px;
+                padding: 3px;
+            }
+            QToolButton {
+                padding: 6px 8px;
+                border-radius: 4px;
+            }
+            QToolButton:hover {
+                background-color: #e9ecef;
+            }
+            QToolButton:pressed {
+                background-color: #dee2e6;
+            }
+        """)
 
     def setup_signals(self):
         """设置信号连接"""
@@ -341,23 +868,139 @@ class MainWindow(QMainWindow):
                 self.update_details_display()
                 break
 
-    def update_details_display(self):
-        """更新详情显示"""
+    def update_details_display_with_template(self):
+        """更新详情显示 - 使用模板"""
         if not self.current_entry:
+            # 显示无选择状态
+            html = self.detail_template
+            # 确保显示无选择状态，隐藏详情内容
+            html = self.ensure_no_selection_display(html)
+            self.details_text.setHtml(html)
             return
 
-        details = f"""
-网站名称: {self.current_entry.website_name}
-URL: {self.current_entry.url}
-用户名: {self.current_entry.username}
-分类: {self.current_entry.category}
-创建时间: {self.current_entry.created_at.strftime('%Y-%m-%d %H:%M') if self.current_entry.created_at else ''}
-更新时间: {self.current_entry.updated_at.strftime('%Y-%m-%d %H:%M') if self.current_entry.updated_at else ''}
+        # 准备数据
+        website_name = self.escape_html(self.current_entry.website_name)
 
-备注:
-{self.current_entry.notes}
+        # URL处理：如果是空URL，显示"未设置"，否则创建可点击链接
+        if self.current_entry.url and self.current_entry.url.strip():
+            url_text = self.current_entry.url.strip()
+            # 确保URL有协议前缀
+            if not url_text.startswith(('http://', 'https://')):
+                url_text = 'https://' + url_text
+            url = f'<a href="{url_text}" target="_blank" class="info-value url">{self.escape_html(self.current_entry.url)}</a>'
+        else:
+            url = '<span style="color: #6c757d; font-style: italic;">未设置</span>'
+
+        username = self.escape_html(self.current_entry.username)
+        category = self.escape_html(self.current_entry.category) if self.current_entry.category else '默认'
+        created_at = self.current_entry.created_at.strftime(
+            '%Y-%m-%d %H:%M') if self.current_entry.created_at else '<span style="color: #6c757d; font-style: italic;">未知</span>'
+        updated_at = self.current_entry.updated_at.strftime(
+            '%Y-%m-%d %H:%M') if self.current_entry.updated_at else '<span style="color: #6c757d; font-style: italic;">未知</span>'
+
+        # 备注处理：如果是空备注，显示特定提示
+        if self.current_entry.notes and self.current_entry.notes.strip():
+            notes = self.escape_html(self.current_entry.notes)
+        else:
+            notes = '<div class="empty-note">暂无备注信息</div>'
+
+        # 使用直接HTML替换的方法
+        html = self.detail_template
+
+        # 替换显示状态
+        html = html.replace('id="no-selection"', 'id="no-selection" style="display: none;"')
+        html = html.replace('id="detail-content" style="display: none;"', 'id="detail-content"')
+
+        # 直接替换数据占位符
+        html = html.replace('id="website-name"></div>', f'id="website-name">{website_name}</div>')
+        html = html.replace('id="url"></div>', f'id="url">{url}</div>')
+        html = html.replace('id="username"></div>', f'id="username">{username}</div>')
+        html = html.replace('id="category"></span>', f'id="category">{category}</span>')
+        html = html.replace('id="created-at"></div>', f'id="created-at">{created_at}</div>')
+        html = html.replace('id="updated-at"></div>', f'id="updated-at">{updated_at}</div>')
+        html = html.replace('id="notes"></div>', f'id="notes">{notes}</div>')
+
+        self.details_text.setHtml(html)
+        print("详情数据填充完成")
+
+    def update_details_display(self):
+        """更新详情显示 - 使用纯文本美化格式"""
+        if not self.current_entry:
+            # 显示无选择状态
+            self.details_text.setPlainText("""
+    ╔═══════════════════════════════════════
+    ║           🔐 密码管理器                
+    ╠═══════════════════════════════════════
+    ║                                      
+    ║   请从左侧列表选择一个密码条目         
+    ║   查看详细信息                        
+    ║                                      
+    ╚═══════════════════════════════════════
+            """)
+            return
+
+        # 准备数据
+        website_name = self.current_entry.website_name
+        url = self.current_entry.url if self.current_entry.url else "未设置"
+        username = self.current_entry.username
+        category = self.current_entry.category if self.current_entry.category else "默认"
+
+        created_at = self.current_entry.created_at.strftime('%Y-%m-%d %H:%M') if self.current_entry.created_at else "未知"
+        updated_at = self.current_entry.updated_at.strftime('%Y-%m-%d %H:%M') if self.current_entry.updated_at else "未知"
+
+        notes = self.current_entry.notes if self.current_entry.notes else "无备注信息"
+
+        # 创建格式化的纯文本显示
+        details = f"""
+    ╔═══════════════════════════════════════
+    ║           🔐 密码管理器                
+    ╠═══════════════════════════════════════
+
+    📋 基本信息
+    ─────────────────────────────────────
+    🌐 网站名称: {website_name}
+
+    🔗 网站地址: {url}
+
+    👤 用户名: {username}
+
+    📁 分类: {category}
+
+
+    ⏰ 时间信息  
+    ─────────────────────────────────────
+    📅 创建时间: {created_at}
+
+    🔄 更新时间: {updated_at}
+
+
+    📝 备注信息
+    ─────────────────────────────────────
+    {notes}
+
+    ╚═══════════════════════════════════════
         """
-        self.details_text.setText(details)
+
+        self.details_text.setPlainText(details)
+
+
+    def ensure_no_selection_display(self, html):
+        """确保显示无选择状态"""
+        # 隐藏详情内容，显示无选择提示
+        html = html.replace('id="no-selection"', 'id="no-selection"')
+        html = html.replace('id="detail-content"', 'id="detail-content" style="display: none;"')
+        return html
+
+    def escape_html(self, text):
+        """转义HTML特殊字符"""
+        if not text:
+            return ""
+        return (text.replace('&', '&amp;')
+                .replace('<', '&lt;')
+                .replace('>', '&gt;')
+                .replace('"', '&quot;')
+                .replace("'", '&#39;')
+                .replace('\n', '<br>'))
 
     def on_search(self):
         """搜索处理"""
@@ -600,6 +1243,9 @@ URL: {self.current_entry.url}
             # 当前未锁定，执行锁定操作
             self.lock_application()
 
+        # 更新锁定/解锁状态显示
+        self.update_lock_action_text()
+
     def on_generate_password(self):
         """生成密码"""
         password = self.password_generator.generate_password()
@@ -673,3 +1319,42 @@ URL: {self.current_entry.url}
                 QMessageBox.information(self, "成功",
                                         "主密码修改成功！\n"
                                         "请注意：某些操作可能需要重新登录后才能正常工作。")
+
+    def check_menu_icon_availability(self):
+        """检查菜单图标可用性"""
+        print("=== 菜单图标可用性检查 ===")
+
+        # 定义需要的图标
+        required_icons = {
+            "lock": "锁定",
+            "sync": "同步",
+            "add": "添加",
+            "edit": "编辑",
+            "delete": "删除",
+            "key": "生成密码",
+            "category": "管理分类",
+            "admin_password": "修改密码",
+            "settings": "设置"
+        }
+
+        available = []
+        missing = []
+
+        for icon_name, description in required_icons.items():
+            icon = self.icon_manager.get_icon(icon_name)
+            if not icon.isNull():
+                available.append(f"✅ {description} [{icon_name}]")
+            else:
+                missing.append(f"❌ {description} [{icon_name}]")
+
+        print("可用的图标:")
+        for item in available:
+            print(f"  {item}")
+
+        if missing:
+            print("\n缺失的图标:")
+            for item in missing:
+                print(f"  {item}")
+            print("\n建议: 使用Unicode字符作为备选方案")
+        else:
+            print("\n所有图标都可用!")

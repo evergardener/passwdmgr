@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .section {
+            background: white;
+            margin-bottom: 25px;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border-left: 4px solid #667eea;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .section-header h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #444;
+        }
+
+        .section-icon {
+            font-size: 20px;
+            margin-right: 10px;
+        }
+
+        .field {
+            margin-bottom: 15px;
+            padding: 8px 0;
+        }
+
+        .field:last-child {
+            margin-bottom: 0;
+        }
+
+        .field-label {
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .field-value {
+            color: #333;
+            font-size: 16px;
+            padding-left: 10px;
+        }
+
+        .field-value.url {
+            color: #0066cc;
+            text-decoration: none;
+        }
+
+        .category-tag {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .notes-content {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 3px solid #4caf50;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+
+        .empty-note {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .no-selection {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .no-selection h2 {
+            font-size: 22px;
+            margin-bottom: 10px;
+            color: #444;
+        }
+    </style>
+</head>
+<body>
+    <div id="no-selection" class="no-selection">
+        <h2>🔐 密码管理器</h2>
+        <p>请从左侧列表选择一个密码条目查看详细信息</p>
+    </div>
+
+    <div id="detail-content" style="display: none;">
+        <div class="header">
+            <h1>🔐 密码管理器</h1>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <span class="section-icon">📋</span>
+                <h3>基本信息</h3>
+            </div>
+
+            <div class="field">
+                <div class="field-label">🌐 网站名称</div>
+                <div class="field-value" id="website-name"></div>
+            </div>
+
+            <div class="field">
+                <div class="field-label">🔗 网站地址</div>
+                <div class="field-value" id="url"></div>
+            </div>
+
+            <div class="field">
+                <div class="field-label">👤 用户名</div>
+                <div class="field-value" id="username"></div>
+            </div>
+
+            <div class="field">
+                <div class="field-label">📁 分类</div>
+                <div class="field-value">
+                    <span class="category-tag" id="category"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <span class="section-icon">⏰</span>
+                <h3>时间信息</h3>
+            </div>
+
+            <div class="field">
+                <div class="field-label">📅 创建时间</div>
+                <div class="field-value" id="created-at"></div>
+            </div>
+
+            <div class="field">
+                <div class="field-label">🔄 更新时间</div>
+                <div class="field-value" id="updated-at"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <span class="section-icon">📝</span>
+                <h3>备注信息</h3>
+            </div>
+
+            <div class="notes-content" id="notes"></div>
+        </div>
+    </div>
+
+    <script>
+        function showNoSelection() {
+            document.getElementById('no-selection').style.display = 'block';
+            document.getElementById('detail-content').style.display = 'none';
+        }
+
+        function showDetailContent() {
+            document.getElementById('no-selection').style.display = 'none';
+            document.getElementById('detail-content').style.display = 'block';
+        }
+
+        showNoSelection();
+    </script>
+</body>
+</html>

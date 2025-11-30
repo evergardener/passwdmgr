@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt
 
 from models.password_entry import PasswordEntry
+from gui.icon_manager import get_icon_manager
 
 
 class AddEditDialog(QDialog):
@@ -26,6 +27,8 @@ class AddEditDialog(QDialog):
         self.config_manager = config_manager
         self.entry = entry
         self.is_edit = entry is not None
+
+
 
         # 初始化成员变量
         self.website_input = None
@@ -44,6 +47,10 @@ class AddEditDialog(QDialog):
 
         if self.is_edit:
             self.load_entry_data()
+
+        # 设置对话框图标
+        icon_manager = get_icon_manager()
+        icon_manager.set_window_icon(self, "favicon")
 
         print("AddEditDialog 初始化完成")
 
