@@ -1,158 +1,119 @@
-name: Build Multi-Platform
+name: Multi-Platform Build (Win & ARM64)
 
 on:
+  # 当推送带有 'v' 开头的 Tag 时触发构建
   push:
-    tags: ['v*']
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*'
+  # 允许手动在 GitHub 页面上触发
   workflow_dispatch:
 
 jobs:
+  # ==========================================================
+  # 任务一：构建 Windows EXE 可执行程序 (x64)
+  # ==========================================================
+  build-windows-exe:
+    runs-on: windows-latest
+    name: Build Windows EXE
+
+    steps:
+      - name: 📦 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: ⚙️ Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: 🔨 Build EXE with PyInstaller
+        # 注意：Windows 命令使用 '^' 进行换行，且资源分隔符是 ';'
+        run: |
+          pyinstaller --clean --noconfirm --onefile --windowed ^
+                      --add-data "assets;assets" ^
+                      --name "passwdmgr-win-x64.exe" ^
+                      main.py
+
+      - name: ⬆️ Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PasswdMgr-Windows-x64
+          path: dist/passwdmgr-win-x64.exe
+
+  # ==========================================================
+  # 任务二：构建 ARM64 AppImage (Linux)
+  # 依赖于 QEMU 跨架构模拟
+  # ==========================================================
   build-arm64-appimage:
+    runs-on: ubuntu-latest
     name: Build ARM64 AppImage
-    runs-on: ubuntu-latest  # 改为使用标准的 x86_64 运行器
+
+    # 可选：如果希望 Windows 先跑完，可以添加 needs: [build-windows-exe]
 
     steps:
-      - name: Checkout repository
+      - name: 📦 Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up QEMU for ARM64 emulation
-        uses: docker/setup-qemu-action@v3
+      - name: 🐧 Setup ARM64 Build Environment (QEMU)
+        # 使用 uraimo/run-on-arch-action 在 x64 Runner 上模拟 ARM64 环境
+        uses: uraimo/run-on-arch-action@v2
         with:
-          platforms: arm64
+          arch: aarch64
+          # 使用 Ubuntu 20.04 确保 AppImage 兼容性
+          distro: ubuntu20.04
+          githubToken: ${{ github.token }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
+          run: |
+            # 1. 安装系统依赖 (Qt/PyQt6 运行时所需的核心库)
+            apt-get update
+            apt-get install -y python3-pip python3-venv python3-dev \
+                               libgl1-mesa-dev libegl1-mesa libxkbcommon-x11-0 \
+                               libdbus-1-3 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+                               libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 \
+                               libxcb-xfixes0 wget file fuse
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fuse libfuse2 wget desktop-file-utils file
-          sudo apt-get install -y python3-dev build-essential
+            # 2. Python Setup and Dependencies
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            pip install pyinstaller
 
-      - name: Install Python dependencies for ARM64
-        run: |
-          python -m pip install --upgrade pip
-          # 使用多架构支持安装依赖
-          pip install -r requirements.txt
-          pip install pyinstaller
+            # 3. PyInstaller Build (AppImage 需要目录模式)
+            # 注意：Linux 资源分隔符是 ':'
+            pyinstaller --clean --noconfirm --distpath dist --workpath build \
+                        --name "passwdmgr" \
+                        --windowed \
+                        --add-data "assets:assets" \
+                        main.py
 
-      - name: Download ARM64 appimagetool
-        run: |
-          wget -O appimagetool.aarch64.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage
-          chmod +x appimagetool.aarch64.AppImage
+            # 4. AppImage 目录结构和元数据准备 (需要确保 app.desktop 和 icon.png 存在于项目根目录)
+            mkdir -p AppDir
+            cp -r dist/passwdmgr/* AppDir/
+            cp app.desktop AppDir/
+            cp icon.png AppDir/
+            ln -sr AppDir/passwdmgr AppDir/AppRun
 
-      - name: Build with PyInstaller for ARM64
-        run: |
-          # 使用 PyInstaller 构建 ARM64 二进制文件
-          pyinstaller --name="PasswordManager" \
-            --windowed \
-            --onefile \
-            --add-data="gui/*.py:gui" \
-            --add-data="core/*.py:core" \
-            --add-data="models/*.py:models" \
-            --add-data="utils/*.py:utils" \
-            main.py
+            # 5. AppImage 打包工具下载与运行
+            wget https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage
+            chmod +x appimagetool-aarch64.AppImage
+            # 解压工具并在容器内运行（绕过 FUSE 限制）
+            ./appimagetool-aarch64.AppImage --appimage-extract
+            mv squashfs-root tool
+            
+            # 使用 ARCH=arm64 环境变量进行打包
+            ARCH=arm64 ./tool/AppRun AppDir passwdmgr-aarch64.AppImage
+            
+            # 将最终文件移出工作目录
+            mv passwdmgr-aarch64.AppImage ../passwdmgr-aarch64.AppImage
 
-      - name: Verify binary architecture
-        run: |
-          file dist/PasswordManager
-          # 现在应该显示 x86_64 架构，因为我们是在 x86_64 上构建
-
-      - name: Prepare AppDir
-        run: |
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-
-          cp dist/PasswordManager AppDir/usr/bin/
-
-          cat > AppDir/usr/share/applications/password-manager.desktop << EOF
-          [Desktop Entry]
-          Name=Password Manager
-          Comment=A secure password manager application
-          Exec=PasswordManager
-          Icon=password-manager
-          Type=Application
-          Categories=Utility;Security;
-          StartupNotify=true
-          Terminal=false
-          EOF
-
-      - name: Create AppImage
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION="latest"
-          fi
-          
-          ./appimagetool.aarch64.AppImage AppDir
-          mv PasswordManager-*-aarch64.AppImage PasswordManager-${VERSION}-aarch64.AppImage
-
-      - name: Upload ARM64 AppImage artifact
+      - name: ⬆️ Upload Linux ARM64 Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PasswordManager-ARM64-AppImage
-          path: PasswordManager-*-aarch64.AppImage
-          retention-days: 30
-
-      - name: Upload ARM64 AppImage to Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: PasswordManager-*-aarch64.AppImage
-
-  build-x64-exe:
-    name: Build x86_64 Windows EXE
-    runs-on: windows-latest  # 使用Windows运行器构建EXE
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
-
-      - name: Build with PyInstaller
-        run: |
-          pyinstaller --name="PasswordManager" `
-            --windowed `
-            --onefile `
-            --add-data="gui/*.py;gui" `
-            --add-data="core/*.py;core" `
-            --add-data="models/*.py;models" `
-            --add-data="utils/*.py;utils" `
-            main.py
-
-      - name: Rename output with version
-        run: |
-          if ($env:GITHUB_REF -like "refs/tags/v*") {
-            $VERSION = $env:GITHUB_REF -replace "refs/tags/v", ""
-          } else {
-            $VERSION = "latest"
-          }
-          Copy-Item "dist/PasswordManager.exe" "dist/PasswordManager-${VERSION}-x64.exe"
-
-      - name: Upload x64 EXE artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: PasswordManager-x64-EXE
-          path: dist/PasswordManager-*-x64.exe
-          retention-days: 30
-
-      - name: Upload x64 EXE to Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: dist/PasswordManager-*-x64.exe
+          name: PasswdMgr-ARM64-AppImage
+          path: passwdmgr-aarch64.AppImage

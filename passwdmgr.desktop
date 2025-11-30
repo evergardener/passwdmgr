@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Password Manager
+Exec=AppRun
+Icon=favicon.png
+Categories=Utility;

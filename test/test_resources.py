@@ -15,9 +15,9 @@ def debug_resources():
     """调试资源文件"""
     # 获取项目根目录
     if getattr(sys, 'frozen', False):
-        base_dir = Path(sys.executable).parent
+        base_dir = Path(sys.executable).parent.parent
     else:
-        base_dir = Path(__file__).parent
+        base_dir = Path(__file__).parent.parent
 
     print(f"项目根目录: {base_dir}")
     print("\n目录结构:")
