@@ -34,6 +34,7 @@ jobs:
       - name: 🔨 Build EXE with PyInstaller (使用一行命令)
         # Windows Runner 默认使用 PowerShell (pwsh)，避免使用 PowerShell 的换行符 '^' 导致的解析问题
         # 注意资源分隔符是 ';'
+        shell: cmd
         run: pyinstaller --clean --noconfirm --onefile --windowed --add-data "assets;assets" --name "passwdmgr-win-x64.exe" main.py
 
       - name: ⬆️ Upload Windows Artifact
