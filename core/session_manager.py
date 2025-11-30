@@ -20,10 +20,16 @@ class SessionManager:
 
     def unlock(self, master_password: str) -> bool:
         """解锁会话"""
-        self.master_password = master_password
-        self.last_activity = time.time()
-        self.is_locked = False
-        return True
+        try:
+            self.master_password = master_password
+            self.last_activity = time.time()
+            self.is_locked = False
+            print(f"会话已解锁，主密码长度: {len(master_password)}")
+            return True
+        except Exception as e:
+            print(f"解锁会话失败: {e}")
+            self.lock()
+            return False
 
     def lock(self):
         """锁定会话"""
@@ -48,12 +54,37 @@ class SessionManager:
 
         return False
 
-    def get_master_password(self) -> Optional[str]:
-        """获取主密码"""
+    def get_master_password(self) -> str:
+        """获取主密码 - 添加调试信息"""
         if self.is_locked:
+            print("会话已锁定，无法获取主密码")
             return None
-        return self.master_password
+
+        password = self.master_password
+        print(f"获取主密码，长度: {len(password) if password else 0}")
+        return password
 
     def set_auto_lock_minutes(self, minutes: int):
         """设置自动锁定时间"""
         self.auto_lock_minutes = minutes
+
+    def update_master_password(self, new_password: str) -> bool:
+        """安全地更新主密码"""
+        try:
+            # 验证新密码
+            if not new_password or len(new_password) < 8:
+                print("新密码无效")
+                return False
+
+            print(f"正在更新会话管理器的主密码，新密码长度: {len(new_password)}")
+
+            # 更新主密码
+            self.master_password = new_password
+            self.update_activity()
+
+            print("会话管理器主密码更新成功")
+            return True
+
+        except Exception as e:
+            print(f"更新主密码失败: {e}")
+            return False

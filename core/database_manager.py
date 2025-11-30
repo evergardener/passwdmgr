@@ -13,7 +13,10 @@ from mysql.connector import Error
 from typing import List, Optional, Dict, Any
 import logging
 import os
+import secrets
+import string
 from models.password_entry import PasswordEntry
+from core.encryption_manager import EncryptionManager
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +34,15 @@ class DatabaseManager:
         print(f"数据库配置: use_sqlite={config.get('use_sqlite')}")
 
         if config.get('use_sqlite', True):  # 默认使用 SQLite
-            return self._connect_sqlite(config)
+            success = self._connect_sqlite(config)
         else:
-            return self._connect_mysql(config)
+            success = self._connect_mysql(config)
+
+            # 连接成功后确保表存在
+        if success:
+            self.ensure_tables_exist()
+
+        return success
 
     def _connect_sqlite(self, config: Dict[str, Any]) -> bool:
         """连接到 SQLite 数据库"""
@@ -90,7 +99,7 @@ class DatabaseManager:
 
             if self.config.get('use_sqlite', True):
                 # SQLite 建表语句
-                create_table_sql = """
+                create_password_entries_sql = """
                     CREATE TABLE IF NOT EXISTS password_entries (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         website_name TEXT NOT NULL,
@@ -103,9 +112,21 @@ class DatabaseManager:
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """
+
+                # 创建 user_config 表
+                create_user_config_sql = """
+                    CREATE TABLE IF NOT EXISTS user_config (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        config_key TEXT NOT NULL UNIQUE,
+                        config_value TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """
+
             else:
                 # MySQL 建表语句
-                create_table_sql = """
+                create_password_entries_sql = """
                     CREATE TABLE IF NOT EXISTS password_entries (
                         id INT AUTO_INCREMENT PRIMARY KEY,
                         website_name VARCHAR(255) NOT NULL,
@@ -119,8 +140,43 @@ class DatabaseManager:
                     )
                 """
 
+                # 创建 user_config 表
+                create_user_config_sql = """
+                    CREATE TABLE IF NOT EXISTS user_config (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        config_key VARCHAR(255) NOT NULL UNIQUE,
+                        config_value TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    )
+                """
+
             # 执行建表语句
-            cursor.execute(create_table_sql)
+            cursor.execute(create_password_entries_sql)
+            cursor.execute(create_user_config_sql)
+
+            # 创建索引
+            if self.config.get('use_sqlite', True):
+                # SQLite 索引
+                index_sql = [
+                    "CREATE INDEX IF NOT EXISTS idx_website_name ON password_entries(website_name)",
+                    "CREATE INDEX IF NOT EXISTS idx_category ON password_entries(category)",
+                    "CREATE INDEX IF NOT EXISTS idx_config_key ON user_config(config_key)"
+                ]
+            else:
+                # MySQL 索引
+                index_sql = [
+                    "CREATE INDEX idx_website_name ON password_entries(website_name)",
+                    "CREATE INDEX idx_category ON password_entries(category)",
+                    "CREATE INDEX idx_config_key ON user_config(config_key)"
+                ]
+
+            # 执行索引创建
+            for sql in index_sql:
+                try:
+                    cursor.execute(sql)
+                except Exception as e:
+                    print(f"创建索引时出错 (可能已存在): {e}")
 
             if hasattr(self.connection, 'commit'):
                 self.connection.commit()
@@ -463,3 +519,165 @@ class DatabaseManager:
             print(f"搜索记录错误: {e}")
 
         return entries
+
+    def create_auth_token(self, master_password: str, encryption_manager) -> bool:
+        """创建验证令牌 - 修复版本"""
+        try:
+            # 生成一个安全的随机验证令牌
+            import secrets
+            auth_token = secrets.token_hex(32)
+
+            print(f"创建验证令牌，令牌长度: {len(auth_token)}")
+
+            # 加密令牌
+            encrypted_token = encryption_manager.encrypt(auth_token, master_password)
+
+            print(f"令牌加密成功，加密后长度: {len(encrypted_token)}")
+
+            # 存储到数据库
+            cursor = self.connection.cursor()
+
+            if self.config.get('use_sqlite', True):
+                query = """
+                    INSERT OR REPLACE INTO user_config (config_key, config_value)
+                    VALUES (?, ?)
+                """
+            else:
+                query = """
+                    INSERT INTO user_config (config_key, config_value)
+                    VALUES (%s, %s)
+                    ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)
+                """
+
+            cursor.execute(query, ("auth_token", encrypted_token))
+
+            if hasattr(self.connection, 'commit'):
+                self.connection.commit()
+
+            cursor.close()
+
+            print("验证令牌创建成功")
+            return True
+
+        except Exception as e:
+            logger.error(f"创建验证令牌失败: {e}")
+            print(f"创建验证令牌失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def validate_master_password(self, master_password: str, encryption_manager) -> bool:
+        """验证主密码"""
+        try:
+            # 获取验证令牌
+            cursor = self.connection.cursor()
+
+            if self.config.get('use_sqlite', True):
+                query = "SELECT config_value FROM user_config WHERE config_key = ?"
+            else:
+                query = "SELECT config_value FROM user_config WHERE config_key = %s"
+
+            cursor.execute(query, ("auth_token",))
+
+            result = cursor.fetchone()
+            cursor.close()
+
+            if not result:
+                # 没有验证令牌，需要创建（首次使用）
+                print("首次使用，创建验证令牌")
+                return self.create_auth_token(master_password, encryption_manager)
+
+            # 获取加密的令牌
+            if self.config.get('use_sqlite', True):
+                encrypted_token = result[0]
+            else:
+                encrypted_token = result['config_value']
+
+            if not encrypted_token:
+                print("验证令牌为空，重新创建")
+                return self.create_auth_token(master_password, encryption_manager)
+
+            # 尝试解密令牌
+            try:
+                decrypted_token = encryption_manager.decrypt(encrypted_token, master_password)
+                # 如果解密成功，密码正确
+                print("主密码验证成功")
+                return True
+            except Exception as e:
+                # 解密失败，密码错误
+                print(f"主密码验证失败: {e}")
+                return False
+
+        except Exception as e:
+            logger.error(f"验证主密码失败: {e}")
+            print(f"验证主密码失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def check_auth_token_exists(self) -> bool:
+        """检查验证令牌是否存在"""
+        try:
+            cursor = self.connection.cursor()
+
+            if self.config.get('use_sqlite', True):
+                query = "SELECT COUNT(*) FROM user_config WHERE config_key = 'auth_token'"
+            else:
+                query = "SELECT COUNT(*) FROM user_config WHERE config_key = 'auth_token'"
+
+            cursor.execute(query)
+            result = cursor.fetchone()
+            cursor.close()
+
+            if result and result[0] > 0:
+                # 检查令牌是否为空
+                cursor = self.connection.cursor()
+                if self.config.get('use_sqlite', True):
+                    query = "SELECT config_value FROM user_config WHERE config_key = 'auth_token'"
+                else:
+                    query = "SELECT config_value FROM user_config WHERE config_key = 'auth_token'"
+
+                cursor.execute(query)
+                token_result = cursor.fetchone()
+                cursor.close()
+
+                if token_result:
+                    if self.config.get('use_sqlite', True):
+                        token_value = token_result[0]
+                    else:
+                        token_value = token_result['config_value']
+
+                    return bool(token_value and token_value.strip())
+
+            return False
+
+        except Exception as e:
+            print(f"检查验证令牌失败: {e}")
+            return False
+
+    def ensure_tables_exist(self):
+        """确保所有必要的表都存在"""
+        try:
+            cursor = self.connection.cursor()
+
+            # 检查 user_config 表是否存在
+            if self.config.get('use_sqlite', True):
+                check_sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='user_config'"
+            else:
+                check_sql = "SHOW TABLES LIKE 'user_config'"
+
+            cursor.execute(check_sql)
+            result = cursor.fetchone()
+            cursor.close()
+
+            if not result:
+                # 表不存在，重新初始化数据库
+                print("user_config 表不存在，重新初始化数据库")
+                self._initialize_database()
+            else:
+                print("所有数据库表已存在")
+
+        except Exception as e:
+            print(f"检查数据库表错误: {e}")
+            # 出错时尝试重新初始化
+            self._initialize_database()

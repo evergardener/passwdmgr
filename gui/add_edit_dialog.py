@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QComboBox, QCheckBox, QSpinBox, QGroupBox)
 from PyQt6.QtCore import Qt
 
-from ..models.password_entry import PasswordEntry
+from models.password_entry import PasswordEntry
 
 
 class AddEditDialog(QDialog):

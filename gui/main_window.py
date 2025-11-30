@@ -278,7 +278,13 @@ class MainWindow(QMainWindow):
 
     def show_login_dialog(self):
         """显示登录对话框"""
-        dialog = LoginDialog(self.session_manager, self.encryption_manager, self)
+        dialog = LoginDialog(
+            self.session_manager,
+            self.encryption_manager,
+            self.database_manager,  # 新增参数
+            self
+        )
+
         if dialog.exec():
             self.status_bar.showMessage("已解锁")
             self.update_lock_action_text()
@@ -638,7 +644,7 @@ URL: {self.current_entry.url}
         dialog.exec()
 
     def on_change_password(self):
-        """修改主密码"""
+        """修改主密码 - 强制重新验证"""
         if self.session_manager.is_locked:
             QMessageBox.warning(self, "警告", "请先解锁应用程序")
             return
@@ -653,4 +659,17 @@ URL: {self.current_entry.url}
         )
 
         if dialog.exec():
-            QMessageBox.information(self, "成功", "主密码修改成功")
+            # 修改成功后，强制重新登录以确保一致性
+            reply = QMessageBox.question(
+                self, "重新登录",
+                "主密码修改成功！为了确保安全性，建议立即重新登录。\n是否现在重新登录？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                self.lock_application()
+                self.show_login_dialog()
+            else:
+                QMessageBox.information(self, "成功",
+                                        "主密码修改成功！\n"
+                                        "请注意：某些操作可能需要重新登录后才能正常工作。")
