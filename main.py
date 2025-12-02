@@ -6,9 +6,9 @@
 # @Python:  3.12
 # @Description:
 
-# !/usr/bin/env python3
 import sys
 import os
+import ctypes
 import logging
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
@@ -95,11 +95,16 @@ class PasswordManagerApp:
 def main():
     """主函数"""
     try:
+        # 检查资源路径
+        if not os.path.exists('resources'):
+            print("警告: resources 目录不存在")
         app = PasswordManagerApp()
         sys.exit(app.run())
     except Exception as e:
         print(f"应用程序启动失败: {e}")
         traceback.print_exc()
+        if sys.platform == "win32":
+            ctypes.windll.user32.MessageBoxW(0, f"应用程序启动失败:\n{e}", "错误", 0)
         return 1
 
 

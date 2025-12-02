@@ -1,110 +1,302 @@
-name: Multi-Platform Build (Win & ARM64)
+name: Build and Release
 
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*'  # 当推送以v开头的标签时触发，如 v1.0.0
 
 jobs:
-  # ==========================================================
-  # 任务一：构建 Windows EXE 可执行程序 (已修复 ParserError)
-  # ==========================================================
-  build-windows-exe:
+  build-windows-x86_64:
     runs-on: windows-latest
-    name: Build Windows EXE
+    strategy:
+      matrix:
+        python-version: ["3.12"]
 
     steps:
-      - name: 📦 Checkout Code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v5
-        with:
-          # 降低 Python 版本，以提高与 PyInstaller 的兼容性
-          python-version: '3.10'
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
 
-      - name: ⚙️ Install Python Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          # 确保在本地或仓库中，你已经移除了 requirements.txt 中硬编码的 'cffi==2.0.0'
-          pip install -r requirements.txt
-          pip install pyinstaller
+    - name: Install system dependencies (Windows)
+      run: |
+        choco install upx -y
 
-      - name: 🔨 Build EXE with PyInstaller (使用一行命令)
-        # Windows Runner 默认使用 PowerShell (pwsh)，避免使用 PowerShell 的换行符 '^' 导致的解析问题
-        # 注意资源分隔符是 ';'
-        shell: cmd
-        run: pyinstaller --clean --noconfirm --onefile --windowed --add-data "assets;assets" --name "passwdmgr-win-x64.exe" main.py
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install PyQt6 cryptography mysql-connector-python pillow pyinstaller
+        pip list
 
-      - name: ⬆️ Upload Windows Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: PasswdMgr-Windows-x64
-          path: dist/passwdmgr-win-x64.exe
+    - name: Build Windows EXE (x86_64)
+      run: |
+        # 清理构建目录
+        Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
+        
+        # 检查图标文件
+        $iconFile = "resources/icons/favicon.ico"
+        if (-Not (Test-Path $iconFile)) {
+            $iconFile = "resources/icons/favicon.png"
+        }
+        
+        # 构建参数
+        $pyinstallerArgs = @(
+            'main.py',
+            '--name=PasswordManager',
+            '--windowed',
+            '--clean',
+            '--onefile',
+            '--add-data=resources;resources',
+            '--add-data=config.json;.',
+            '--add-data=*.db;.',
+            '--hidden-import=cryptography',
+            '--hidden-import=cryptography.hazmat.backends.openssl',
+            '--hidden-import=mysql.connector',
+            '--hidden-import=PyQt6',
+            '--hidden-import=PIL',
+            '--hidden-import=PIL.Image',
+            '--hidden-import=PIL.ImageFile',
+            '--hidden-import=PIL._imaging',
+            '--exclude-module=tkinter'
+        )
+        
+        if (Test-Path $iconFile) {
+            $pyinstallerArgs += "--icon=$iconFile"
+        }
+        
+        Write-Output "构建参数:"
+        foreach ($arg in $pyinstallerArgs) {
+            Write-Output "  $arg"
+        }
+        
+        # 执行构建
+        python -m PyInstaller @pyinstallerArgs
+        
+        # 重命名
+        Move-Item "dist/PasswordManager.exe" "dist/PasswordManager-windows-x86_64.exe"
 
-  # ==========================================================
-  # 任务二：构建 ARM64 AppImage (已修复 cffi 依赖错误)
-  # ==========================================================
-  build-arm64-appimage:
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-x86_64-exe
+        path: dist/PasswordManager-windows-x86_64.exe
+
+  build-linux-arm64-appimage:
     runs-on: ubuntu-latest
-    name: Build ARM64 AppImage
+    strategy:
+      matrix:
+        python-version: ["3.12"]
 
     steps:
-      - name: 📦 Checkout Code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: 🐧 Setup ARM64 Build Environment (QEMU)
-        uses: uraimo/run-on-arch-action@v2
-        with:
-          arch: aarch64
-          distro: ubuntu20.04
-          githubToken: ${{ github.token }}
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
 
-          run: |
-            # 1. 安装系统依赖
-            apt-get update
-            apt-get install -y python3-pip python3-venv python3-dev \
-                               libgl1-mesa-dev libegl1-mesa libxkbcommon-x11-0 \
-                               libdbus-1-3 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
-                               libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 \
-                               libxcb-xfixes0 wget file fuse
+    - name: Install system dependencies for ARM64 cross-compilation
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libssl-dev \
+          libffi-dev \
+          python3-dev \
+          upx \
+          wget \
+          file \
+          desktop-file-utils \
+          libgirepository1.0-dev \
+          libcairo2-dev \
+          gir1.2-gtk-3.0 \
+          qemu-user-static \
+          binfmt-support \
+          crossbuild-essential-arm64
 
-            # 2. Python Setup and Dependencies
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install --upgrade pip
-            # 这里的 pip install 会自动寻找 cffi 的兼容版本
-            pip install -r requirements.txt 
-            pip install pyinstaller
+    - name: Install Python dependencies for ARM64
+      run: |
+        python -m pip install --upgrade pip
+        pip install PyQt6 cryptography mysql-connector-python pillow pyinstaller
+        pip list
 
-            # 3. PyInstaller Build (Linux 资源分隔符是 ':')
-            pyinstaller --clean --noconfirm --distpath dist --workpath build \
-                        --name "passwdmgr" \
-                        --windowed \
-                        --add-data "assets:assets" \
-                        main.py
+    - name: Build Linux ARM64 executable
+      run: |
+        # 清理构建目录
+        rm -rf dist build __pycache__
+        
+        # 检查图标文件
+        ICON_FILE=""
+        if [ -f "resources/icons/favicon.png" ]; then
+          ICON_FILE="resources/icons/favicon.png"
+        elif [ -f "resources/icons/favicon.ico" ]; then
+          ICON_FILE="resources/icons/favicon.ico"
+        fi
+        
+        # 构建参数
+        PARAMS=(
+          'main.py'
+          '--name=PasswordManager'
+          '--windowed'
+          '--clean'
+          '--onefile'
+          '--add-data=resources:resources'
+          '--add-data=config.json:.'
+          '--add-data=*.db:.'
+          '--hidden-import=cryptography'
+          '--hidden-import=cryptography.hazmat.backends.openssl'
+          '--hidden-import=mysql.connector'
+          '--hidden-import=PyQt6'
+          '--hidden-import=PIL'
+          '--hidden-import=PIL.Image'
+          '--hidden-import=PIL.ImageFile'
+          '--hidden-import=PIL._imaging'
+          '--exclude-module=tkinter'
+        )
+        
+        if [ -n "$ICON_FILE" ]; then
+          PARAMS+=("--icon=$ICON_FILE")
+        fi
+        
+        echo "构建参数:"
+        printf '  %s\n' "${PARAMS[@]}"
+        
+        # 使用 aarch64-linux-gnu-gcc 进行交叉编译
+        export CC=aarch64-linux-gnu-gcc
+        export CXX=aarch64-linux-gnu-g++
+        
+        # 执行构建
+        python -m PyInstaller "${PARAMS[@]}"
+        
+        echo "✅ Linux ARM64 可执行文件构建完成！"
+        
+        # 检查文件架构
+        file dist/PasswordManager
 
-            # 4. AppImage 目录结构和元数据准备
-            mkdir -p AppDir
-            cp -r dist/passwdmgr/* AppDir/
-            # 假设 app.desktop 和 icon.png 存在
-            cp app.desktop AppDir/
-            cp icon.png AppDir/
-            ln -sr AppDir/passwdmgr AppDir/AppRun
+    - name: Prepare AppDir structure
+      run: |
+        # 创建 AppDir 结构
+        mkdir -p PasswordManager.AppDir/usr/bin
+        mkdir -p PasswordManager.AppDir/usr/lib
+        mkdir -p PasswordManager.AppDir/usr/share/applications
+        mkdir -p PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps
+        
+        # 复制可执行文件
+        cp dist/PasswordManager PasswordManager.AppDir/usr/bin/
+        chmod +x PasswordManager.AppDir/usr/bin/PasswordManager
+        
+        # 复制图标
+        if [ -f "resources/icons/favicon.png" ]; then
+          cp resources/icons/favicon.png PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps/passwordmanager.png
+        elif [ -f "resources/icons/favicon.ico" ]; then
+          # 转换 ICO 到 PNG（如果需要）
+          sudo apt-get install -y imagemagick
+          convert resources/icons/favicon.ico[0] PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps/passwordmanager.png
+        else
+          # 创建占位符图标
+          convert -size 256x256 xc:#4A90E2 -fill white -pointsize 72 -gravity center -draw "text 0,0 '🔐'" PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps/passwordmanager.png
+        fi
+        
+        # 复制资源文件
+        mkdir -p PasswordManager.AppDir/usr/share/passwordmanager
+        cp -r resources PasswordManager.AppDir/usr/share/passwordmanager/
+        cp config.json PasswordManager.AppDir/usr/share/passwordmanager/ 2>/dev/null || true
 
-            # 5. AppImage 打包工具下载与运行
-            wget https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage
-            chmod +x appimagetool-aarch64.AppImage
-            ./appimagetool-aarch64.AppImage --appimage-extract
-            mv squashfs-root tool
-            
-            ARCH=arm64 ./tool/AppRun AppDir passwdmgr-aarch64.AppImage
-            
-            mv passwdmgr-aarch64.AppImage ../passwdmgr-aarch64.AppImage
+    - name: Create .desktop file
+      run: |
+        cat > PasswordManager.AppDir/passwordmanager.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Password Manager
+GenericName=Password Manager
+Comment=A secure password manager application
+Icon=passwordmanager
+Exec=passwordmanager
+Categories=Utility;Security;
+Terminal=false
+StartupNotify=true
+EOF
 
-      - name: ⬆️ Upload Linux ARM64 Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: PasswdMgr-ARM64-AppImage
-          path: passwdmgr-aarch64.AppImage
+    - name: Create AppRun launcher
+      run: |
+        cat > PasswordManager.AppDir/AppRun << 'EOF'
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "${0}")")"
+export PATH="${HERE}/usr/bin:${PATH}"
+export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS}"
+
+# 设置资源路径
+export RESOURCE_PATH="${HERE}/usr/share/passwordmanager/resources"
+export CONFIG_PATH="${HERE}/usr/share/passwordmanager/config.json"
+
+exec "${HERE}/usr/bin/PasswordManager"
+EOF
+        chmod +x PasswordManager.AppDir/AppRun
+
+    - name: Download and use appimagetool
+      run: |
+        # 下载 appimagetool
+        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool.AppImage
+        chmod +x appimagetool.AppImage
+        
+        # 提取 appimagetool
+        ./appimagetool.AppImage --appimage-extract
+        mv squashfs-root appimagetool
+        
+        # 使用 appimagetool 构建 AppImage
+        ARCH=aarch64 ./appimagetool/AppRun PasswordManager.AppDir
+        
+        # 重命名输出文件
+        mv PasswordManager*.AppImage PasswordManager-linux-arm64.AppImage
+
+    - name: Upload Linux AppImage artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-arm64-appimage
+        path: PasswordManager-linux-arm64.AppImage
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [build-windows-x86_64, build-linux-arm64-appimage]
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-x86_64-exe
+        path: artifacts/windows
+
+    - name: Download Linux AppImage artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: linux-arm64-appimage
+        path: artifacts/linux
+
+    - name: Display file information
+      run: |
+        echo "=== 生成的文件 ==="
+        find artifacts -type f -exec ls -lh {} \;
+        echo "=== 文件详情 ==="
+        file artifacts/windows/* 2>/dev/null || true
+        file artifacts/linux/* 2>/dev/null || true
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: |
+          artifacts/windows/PasswordManager-windows-x86_64.exe
+          artifacts/linux/PasswordManager-linux-arm64.AppImage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
