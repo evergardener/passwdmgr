@@ -239,24 +239,28 @@ jobs:
 
     - name: Download and use appimagetool
       run: |
-        # 1. 修正图标位置：在AppDir根目录创建图标链接（解决第二个警告）
-        # 工具期望在根目录找到名为 passwordmanager.png 的图标
-        if [ -f "PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps/passwordmanager.png" ]; then
-          ln -sf "usr/share/icons/hicolor/256x256/apps/passwordmanager.png" "PasswordManager.AppDir/passwordmanager.png"
+        # 1. 修正图标位置：在正确的目录下创建图标链接
+        # 先进入AppDir目录，这样链接路径就简单了
+        cd PasswordManager.AppDir
+        if [ -f "usr/share/icons/hicolor/256x256/apps/passwordmanager.png" ]; then
+          # 在AppDir根目录创建指向内部图标文件的链接
+          ln -sf "usr/share/icons/hicolor/256x256/apps/passwordmanager.png" "passwordmanager.png"
         fi
+        cd .. # 回到原目录
 
-        # 2. 下载 appimagetool 的 ARM64 版本（关键修正）
-        # 使用专门为aarch64架构构建的版本，从根本上避免架构识别错误
-        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage -O appimagetool-aarch64.AppImage
-        chmod +x appimagetool-aarch64.AppImage
+        # 2. 下载 x86_64 版本的 appimagetool (因为Runner环境是x86_64)
+        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool-x86_64.AppImage
+        chmod +x appimagetool-x86_64.AppImage
 
-        # 3. 使用正确的工具和语法进行打包
-        # 关键：直接运行ARM64版本的工具，它会自动识别并输出正确的架构
-        ./appimagetool-aarch64.AppImage PasswordManager.AppDir
+        # 3. 关键：使用环境变量 ARCH 来指定“目标架构”为 aarch64，然后运行 x86_64 的打包工具
+        # 这样工具就会为我们生成一个 aarch64 的 AppImage
+        ARCH=aarch64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run PasswordManager.AppDir
 
-        # 4. 重命名输出文件（现在生成的应该是aarch64架构的文件）
-        # 注意：这里匹配的文件名模式可能已变，使用通配符更安全
-        mv Password_Manager*.AppImage PasswordManager-linux-arm64.AppImage 2>/dev/null || mv PasswordManager*.AppImage PasswordManager-linux-arm64.AppImage
+        # 4. 重命名输出文件（通常生成的格式为“软件名-架构.AppImage”）
+        # 使用通配符匹配，并给出明确的最终文件名
+        mv Password_Manager-aarch64.AppImage PasswordManager-linux-arm64.AppImage 2>/dev/null || 
+          (echo "尝试匹配通用文件名..." && mv Password_Manager*.AppImage PasswordManager-linux-arm64.AppImage 2>/dev/null || 
+           mv PasswordManager*.AppImage PasswordManager-linux-arm64.AppImage)
 
     - name: Upload Linux AppImage artifact
       uses: actions/upload-artifact@v4
