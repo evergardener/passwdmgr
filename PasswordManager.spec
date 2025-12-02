@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('resources', 'resources'), ('config.json', '.'), ('*.db', '.')],
+    datas=[('resources', 'resources'), ('*.db', '.')],
     hiddenimports=['PyQt6', 'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets', 'cryptography', 'cryptography.hazmat.backends.openssl', 'cryptography.hazmat.primitives', 'cryptography.hazmat.primitives.kdf', 'cryptography.hazmat.primitives.ciphers', 'mysql.connector', 'PIL', 'PIL._imaging', 'PIL.Image', 'PIL.ImageDraw', 'PIL.ImageFont'],
     hookspath=[],
     hooksconfig={},

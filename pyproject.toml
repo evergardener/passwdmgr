@@ -1,0 +1,47 @@
+# -*- coding: utf-8 -*-
+#
+# @Created : 2025-12-02 13:42
+# @Author  : Evergarden
+# @Email   : violet20160719@163.com
+# @Python  : 3.12
+# @Desc    :
+[build-system]
+requires = ["setuptools", "wheel", "pyinstaller", "pyproject-appimage"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "your-project"
+version = "1.0.0"
+description = "Your application description"
+authors = [{name = "Your Name"}]
+requires-python = ">=3.8"
+
+[tool.pyproject-appimage]
+script = "main.py"
+output = "YourApp-{version}.AppImage"
+
+[tool.pyinstaller]
+# PyInstaller 主要配置
+onefile = true
+clean = true
+name = "your-app"
+# console 或 windowed (GUI应用用 windowed)
+console = true
+
+
+# 使用 TOML 表格语法正确配置数据文件
+[tool.pyinstaller.datas]
+config.json = "."
+"resources/icons/favicon.ico" = "resources/icons/"
+resources/icons/favicon.png = "resources/icons/"
+resources/templates/ = "resources/templates/"
+# "*.db" = "."  # 如有数据库文件可取消注释
+
+
+# 如有需要，添加隐式导入
+hidden-imports = [
+    # 例如: "sqlite3", "json", "os.path"
+]
+
+# 应用图标（仅对非控制台应用有效）
+icon = "resources/icons/favicon.ico"
