@@ -338,6 +338,7 @@ def create_appdir_with_qt():
         f"{appdir}/usr/lib/qt6/plugins/platforms",
         f"{appdir}/usr/share/applications",
         f"{appdir}/usr/share/icons/hicolor/256x256/apps",
+
     ]
 
     for d in dirs:
@@ -378,7 +379,7 @@ def create_appdir_with_qt():
     copy_icon(appdir)
 
     # 创建AppRun脚本（修复版）
-    create_fixed_apprun(appdir)
+    create_apprun(appdir)
 
     print(f"\n✅ AppDir 创建完成: {appdir}")
     return True
@@ -519,7 +520,7 @@ def create_default_icon(path):
     except Exception as e:
         print(f"创建默认图标失败: {e}")
 
-def create_fixed_apprun(appdir):
+def create_apprun(appdir):
     """创建修复的AppRun脚本"""
 
     apprun_content = '''#!/bin/bash
@@ -623,7 +624,7 @@ def package_appimage():
         appimagetool_path = './appimagetool'
 
     # 打包AppImage
-    output = "PasswordManager-arm64-fixed.AppImage"
+    output = "PasswordManager-arm64.AppImage"
     cmd = [appimagetool_path, 'PasswordManager.AppDir', output]
 
     # 设置架构
