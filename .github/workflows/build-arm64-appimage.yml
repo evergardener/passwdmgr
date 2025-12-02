@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'  # 当推送以v开头的标签时触发，如 v1.0.0
+      - 'v*'
 
 jobs:
   build-windows-x86_64:
@@ -209,34 +209,31 @@ jobs:
 
     - name: Create .desktop file
       run: |
-        cat > PasswordManager.AppDir/passwordmanager.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=Password Manager
-GenericName=Password Manager
-Comment=A secure password manager application
-Icon=passwordmanager
-Exec=passwordmanager
-Categories=Utility;Security;
-Terminal=false
-StartupNotify=true
-EOF
+        echo '[Desktop Entry]' > PasswordManager.AppDir/passwordmanager.desktop
+        echo 'Type=Application' >> PasswordManager.AppDir/passwordmanager.desktop
+        echo 'Name=Password Manager' >> PasswordManager.AppDir/passwordmanager.desktop
+        echo 'GenericName=Password Manager' >> PasswordManager.AppDir/passwordmanager.desktop
+        echo 'Comment=A secure password manager application' >> PasswordManager.AppDir/passwordmanager.desktop
+        echo 'Icon=passwordmanager' >> PasswordManager.AppDir/passwordmanager.desktop
+        echo 'Exec=passwordmanager' >> PasswordManager.AppDir/passwordmanager.desktop
+        echo 'Categories=Utility;Security;' >> PasswordManager.AppDir/passwordmanager.desktop
+        echo 'Terminal=false' >> PasswordManager.AppDir/passwordmanager.desktop
+        echo 'StartupNotify=true' >> PasswordManager.AppDir/passwordmanager.desktop
 
     - name: Create AppRun launcher
       run: |
-        cat > PasswordManager.AppDir/AppRun << 'EOF'
-#!/bin/bash
-HERE="$(dirname "$(readlink -f "${0}")")"
-export PATH="${HERE}/usr/bin:${PATH}"
-export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
-export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS}"
-
-# 设置资源路径
-export RESOURCE_PATH="${HERE}/usr/share/passwordmanager/resources"
-export CONFIG_PATH="${HERE}/usr/share/passwordmanager/config.json"
-
-exec "${HERE}/usr/bin/PasswordManager"
-EOF
+        echo '#!/bin/bash' > PasswordManager.AppDir/AppRun
+        echo 'HERE="$(dirname "$(readlink -f "${0}")")"' >> PasswordManager.AppDir/AppRun
+        echo 'export PATH="${HERE}/usr/bin:${PATH}"' >> PasswordManager.AppDir/AppRun
+        echo 'export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"' >> PasswordManager.AppDir/AppRun
+        echo 'export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS}"' >> PasswordManager.AppDir/AppRun
+        echo '' >> PasswordManager.AppDir/AppRun
+        echo '# 设置资源路径' >> PasswordManager.AppDir/AppRun
+        echo 'export RESOURCE_PATH="${HERE}/usr/share/passwordmanager/resources"' >> PasswordManager.AppDir/AppRun
+        echo 'export CONFIG_PATH="${HERE}/usr/share/passwordmanager/config.json"' >> PasswordManager.AppDir/AppRun
+        echo '' >> PasswordManager.AppDir/AppRun
+        echo 'exec "${HERE}/usr/bin/PasswordManager"' >> PasswordManager.AppDir/AppRun
+        
         chmod +x PasswordManager.AppDir/AppRun
 
     - name: Download and use appimagetool
