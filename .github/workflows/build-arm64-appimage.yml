@@ -217,7 +217,7 @@ jobs:
         echo 'Comment=A secure password manager application' >> PasswordManager.AppDir/passwordmanager.desktop
         echo 'Icon=passwordmanager' >> PasswordManager.AppDir/passwordmanager.desktop
         echo 'Exec=passwordmanager' >> PasswordManager.AppDir/passwordmanager.desktop
-        echo 'Categories=Utility;Security;' >> PasswordManager.AppDir/passwordmanager.desktop
+        echo 'Categories=Utility;Security;Settings' >> PasswordManager.AppDir/passwordmanager.desktop
         echo 'Terminal=false' >> PasswordManager.AppDir/passwordmanager.desktop
         echo 'StartupNotify=true' >> PasswordManager.AppDir/passwordmanager.desktop
 
@@ -239,19 +239,24 @@ jobs:
 
     - name: Download and use appimagetool
       run: |
-        # 下载 appimagetool
-        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool.AppImage
-        chmod +x appimagetool.AppImage
-        
-        # 提取 appimagetool
-        ./appimagetool.AppImage --appimage-extract
-        mv squashfs-root appimagetool
-        
-        # 使用 appimagetool 构建 AppImage
-        ARCH=aarch64 ./appimagetool/AppRun PasswordManager.AppDir
-        
-        # 重命名输出文件
-        mv PasswordManager*.AppImage PasswordManager-linux-arm64.AppImage
+        # 1. 修正图标位置：在AppDir根目录创建图标链接（解决第二个警告）
+        # 工具期望在根目录找到名为 passwordmanager.png 的图标
+        if [ -f "PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps/passwordmanager.png" ]; then
+          ln -sf "usr/share/icons/hicolor/256x256/apps/passwordmanager.png" "PasswordManager.AppDir/passwordmanager.png"
+        fi
+
+        # 2. 下载 appimagetool 的 ARM64 版本（关键修正）
+        # 使用专门为aarch64架构构建的版本，从根本上避免架构识别错误
+        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage -O appimagetool-aarch64.AppImage
+        chmod +x appimagetool-aarch64.AppImage
+
+        # 3. 使用正确的工具和语法进行打包
+        # 关键：直接运行ARM64版本的工具，它会自动识别并输出正确的架构
+        ./appimagetool-aarch64.AppImage PasswordManager.AppDir
+
+        # 4. 重命名输出文件（现在生成的应该是aarch64架构的文件）
+        # 注意：这里匹配的文件名模式可能已变，使用通配符更安全
+        mv Password_Manager*.AppImage PasswordManager-linux-arm64.AppImage 2>/dev/null || mv PasswordManager*.AppImage PasswordManager-linux-arm64.AppImage
 
     - name: Upload Linux AppImage artifact
       uses: actions/upload-artifact@v4
