@@ -439,7 +439,7 @@ StartupNotify=true
 X-AppImage-Version=1.0.0
 '''
 
-    desktop_path = f"{appdir}/passwordmanager.desktop"
+    desktop_path = f"{appdir}/PasswordManager.desktop"
     with open(desktop_path, 'w') as f:
         f.write(desktop_content)
 
@@ -653,7 +653,7 @@ def package_appimage():
 def test_appimage():
     """测试AppImage"""
 
-    appimage = "PasswordManager-arm64-fixed.AppImage"
+    appimage = "PasswordManager-arm64.AppImage"
 
     if not os.path.exists(appimage):
         print("AppImage不存在")
@@ -712,10 +712,10 @@ def main():
     print("\n" + "=" * 60)
     print("构建完成!")
     print("=" * 60)
-    print(f"\n生成的AppImage: PasswordManager-arm64-fixed.AppImage")
+    print(f"\n生成的AppImage: PasswordManager-arm64.AppImage")
     print("\n使用说明:")
-    print("  chmod +x PasswordManager-arm64-fixed.AppImage")
-    print("  ./PasswordManager-arm64-fixed.AppImage")
+    print("  chmod +x PasswordManager-arm64.AppImage")
+    print("  ./PasswordManager-arm64.AppImage")
     print("\n如果仍有问题，请查看AppRun脚本中的调试信息")
 
 if __name__ == "__main__":
