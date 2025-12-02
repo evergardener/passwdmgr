@@ -63,6 +63,10 @@ class ConfigManager:
                     loaded_config = json.load(f)
                     print(f"读取到的配置: {json.dumps(loaded_config, indent=2)}")
 
+                    # 确保数据库配置有 use_sqlite 字段
+                    if 'database' in loaded_config and 'use_sqlite' not in loaded_config['database']:
+                        loaded_config['database']['use_sqlite'] = True
+
                     # 合并配置，确保新字段有默认值
                     self._merge_config(default_config, loaded_config)
 

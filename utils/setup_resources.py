@@ -19,12 +19,17 @@ def setup_resources():
     directories = [
         resources_dir / 'templates',
         resources_dir / 'css',
-        resources_dir / 'icons'
+        resources_dir / 'icons',
+        resources_dir / 'icons/small',
+        resources_dir / 'icons/medium',
+        resources_dir / 'icons/large',
+        resources_dir / 'icons/svg'  # 新增SVG目录
     ]
 
     for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)
         print(f"创建目录: {directory}")
+
 
     # 创建示例文件
     template_content = """<!DOCTYPE html>
@@ -58,6 +63,22 @@ body {
     print(f"创建示例样式: {style_file}")
     print("资源文件结构设置完成！")
 
+
+def create_default_svg_icons(self):
+    """创建默认的SVG图标"""
+    svg_dir = self.resources_dir / 'icons' / 'svg'
+    svg_dir.mkdir(exist_ok=True)
+
+    # 简单的锁图标SVG
+    lock_svg = """<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+    <rect x="6" y="14" width="20" height="14" rx="3" fill="#2196F3"/>
+    <path d="M11 14V9C11 5.68629 13.6863 3 17 3C20.3137 3 23 5.68629 23 9V14" stroke="#1565C0" stroke-width="2"/>
+    <circle cx="16" cy="19" r="3" fill="white"/>
+</svg>"""
+
+    (svg_dir / "lock.svg").write_text(lock_svg, encoding='utf-8')
+    print("创建默认SVG图标")
 
 if __name__ == "__main__":
     setup_resources()

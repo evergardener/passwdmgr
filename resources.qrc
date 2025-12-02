@@ -1,0 +1,9 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+<qresource>
+    <file>resources/icons/favicon.png</file>
+    <file>resources/icons/favicon.ico</file>
+    <file>resources/templates/detail_template.html</file>
+    <file>resources/templates/example_template.html</file>
+</qresource>
+</RCC>

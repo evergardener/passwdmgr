@@ -35,19 +35,38 @@ class ResourceManager:
             return str(base_dir)
 
     def get_resource_path(self, relative_path):
-        """获取资源文件路径"""
-        # 先在 resources 目录中查找
-        resources_path = os.path.join(self.base_path, relative_path)
-        if os.path.exists(resources_path):
-            return resources_path
+        """获取资源文件的绝对路径（兼容打包和开发环境）"""
+        # 尝试多种路径方案
 
-        # 如果没找到，在项目根目录中查找
-        project_root = Path(self.base_path).parent
-        root_path = os.path.join(project_root, relative_path)
-        if os.path.exists(root_path):
-            return root_path
+        # 方案1: 如果是打包环境
+        if getattr(sys, 'frozen', False):
+            # 首先尝试从 _MEIPASS 获取
+            base_path = getattr(sys, '_MEIPASS', '')
+            if base_path:
+                path = os.path.join(base_path, relative_path)
+                if os.path.exists(path):
+                    return path
 
-        print(f"资源文件不存在: {relative_path}")
+        # 方案2: 从当前工作目录获取
+        cwd_path = os.path.join(os.getcwd(), relative_path)
+        if os.path.exists(cwd_path):
+            return cwd_path
+
+        # 方案3: 从项目根目录获取
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        project_path = os.path.join(project_root, relative_path)
+        if os.path.exists(project_path):
+            return project_path
+
+        # 方案4: 从exe所在目录获取
+        if getattr(sys, 'frozen', False) and hasattr(sys, 'executable'):
+            exe_dir = os.path.dirname(sys.executable)
+            exe_path = os.path.join(exe_dir, relative_path)
+            if os.path.exists(exe_path):
+                return exe_path
+
+        # 如果都没找到，返回None
+        print(f"警告: 未找到资源文件: {relative_path}")
         return None
 
     def load_resource(self, relative_path):

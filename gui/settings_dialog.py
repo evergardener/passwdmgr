@@ -47,7 +47,7 @@ class SettingsDialog(QDialog):
         self.ui_tab = QWidget()
         self.setup_ui_tab()
 
-        # 分类设置（新增）
+        # 分类设置
         self.categories_tab = QWidget()
         self.setup_categories_tab()
 
@@ -78,7 +78,30 @@ class SettingsDialog(QDialog):
 
     def setup_database_tab(self):
         """设置数据库选项卡"""
-        layout = QFormLayout(self.db_tab)
+        # 使用垂直布局作为主布局
+        main_layout = QVBoxLayout(self.db_tab)
+
+        # 数据库类型选择
+        type_group = QGroupBox("数据库类型")
+        type_layout = QVBoxLayout(type_group)
+
+        self.use_sqlite_check = QCheckBox("使用 SQLite 数据库")
+        self.use_sqlite_check.setChecked(True)
+        self.use_sqlite_check.toggled.connect(self.on_database_type_changed)
+        type_layout.addWidget(self.use_sqlite_check)
+
+        main_layout.addWidget(type_group)
+
+        # SQLite配置
+        self.sqlite_group = QGroupBox("SQLite 配置")
+        sqlite_layout = QFormLayout(self.sqlite_group)
+        self.sqlite_path = QLineEdit()
+        sqlite_layout.addRow("数据库文件路径:", self.sqlite_path)
+        main_layout.addWidget(self.sqlite_group)
+
+        # MySQL配置
+        self.mysql_group = QGroupBox("MySQL 配置")
+        mysql_layout = QFormLayout(self.mysql_group)
 
         self.db_host = QLineEdit()
         self.db_port = QSpinBox()
@@ -89,12 +112,20 @@ class SettingsDialog(QDialog):
         self.db_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.db_ssl = QCheckBox()
 
-        layout.addRow("主机:", self.db_host)
-        layout.addRow("端口:", self.db_port)
-        layout.addRow("数据库名:", self.db_name)
-        layout.addRow("用户名:", self.db_username)
-        layout.addRow("密码:", self.db_password)
-        layout.addRow("使用SSL:", self.db_ssl)
+        mysql_layout.addRow("主机:", self.db_host)
+        mysql_layout.addRow("端口:", self.db_port)
+        mysql_layout.addRow("数据库名:", self.db_name)
+        mysql_layout.addRow("用户名:", self.db_username)
+        mysql_layout.addRow("密码:", self.db_password)
+        mysql_layout.addRow("使用SSL:", self.db_ssl)
+
+        main_layout.addWidget(self.mysql_group)
+
+        # 添加弹性空间
+        main_layout.addStretch()
+
+        # 初始隐藏MySQL配置
+        self.mysql_group.setVisible(False)
 
     def setup_security_tab(self):
         """设置安全选项卡"""
@@ -196,6 +227,15 @@ class SettingsDialog(QDialog):
         """加载当前设置"""
         # 数据库设置
         db_config = self.config_manager.get_database_config()
+
+        # 数据库类型
+        self.use_sqlite_check.setChecked(db_config.get('use_sqlite', True))
+        self.on_database_type_changed(db_config.get('use_sqlite', True))
+
+        # SQLite 配置
+        self.sqlite_path.setText(db_config.get('sqlite_path', 'password_manager.db'))
+
+        # MySQL 配置
         self.db_host.setText(db_config.get('host', 'localhost'))
         self.db_port.setValue(db_config.get('port', 3306))
         self.db_name.setText(db_config.get('database', 'password_manager'))
@@ -219,16 +259,25 @@ class SettingsDialog(QDialog):
     def on_save(self):
         """保存设置"""
         # 验证数据库设置
-        if not all([
-            self.db_host.text().strip(),
-            self.db_name.text().strip(),
-            self.db_username.text().strip()
-        ]):
-            QMessageBox.warning(self, "错误", "请填写完整的数据库配置")
-            return
+        if self.use_sqlite_check.isChecked():
+            # SQLite模式，验证文件路径
+            if not self.sqlite_path.text().strip():
+                QMessageBox.warning(self, "错误", "请填写SQLite数据库文件路径")
+                return
+        else:
+            # MySQL模式，验证必要字段
+            if not all([
+                self.db_host.text().strip(),
+                self.db_name.text().strip(),
+                self.db_username.text().strip()
+            ]):
+                QMessageBox.warning(self, "错误", "请填写完整的MySQL配置")
+                return
 
         # 保存数据库配置
         db_config = {
+            'use_sqlite': self.use_sqlite_check.isChecked(),
+            'sqlite_path': self.sqlite_path.text().strip(),
             'host': self.db_host.text().strip(),
             'port': self.db_port.value(),
             'database': self.db_name.text().strip(),
@@ -252,21 +301,36 @@ class SettingsDialog(QDialog):
         }
         self.config_manager.update_ui_config(ui_config)
 
-        QMessageBox.information(self, "成功", "设置已保存")
+        QMessageBox.information(self, "成功", "设置已保存，重启程序后生效")
         self.accept()
 
     def on_test_connection(self):
         """测试数据库连接"""
-        from ..core.database_manager import DatabaseManager
+        from core.database_manager import DatabaseManager
 
-        db_config = {
-            'host': self.db_host.text().strip(),
-            'port': self.db_port.value(),
-            'database': self.db_name.text().strip(),
-            'username': self.db_username.text().strip(),
-            'password': self.db_password.text(),
-            'use_ssl': self.db_ssl.isChecked()
-        }
+        # 根据当前选择的数据库类型构建配置
+        if self.use_sqlite_check.isChecked():
+            db_config = {
+                'use_sqlite': True,
+                'sqlite_path': self.sqlite_path.text().strip(),
+                'host': 'localhost',  # SQLite不需要这些，但保持结构一致
+                'port': 3306,
+                'database': 'password_manager',
+                'username': '',
+                'password': '',
+                'use_ssl': False
+            }
+        else:
+            db_config = {
+                'use_sqlite': False,
+                'sqlite_path': '',
+                'host': self.db_host.text().strip(),
+                'port': self.db_port.value(),
+                'database': self.db_name.text().strip(),
+                'username': self.db_username.text().strip(),
+                'password': self.db_password.text(),
+                'use_ssl': self.db_ssl.isChecked()
+            }
 
         db_manager = DatabaseManager()
         if db_manager.test_connection(db_config):
@@ -276,9 +340,9 @@ class SettingsDialog(QDialog):
 
     def on_change_password(self):
         """打开修改主密码对话框"""
-        from ..core.database_manager import DatabaseManager
-        from ..core.encryption_manager import EncryptionManager
-        from ..core.session_manager import SessionManager
+        from core.database_manager import DatabaseManager
+        from core.encryption_manager import EncryptionManager
+        from core.session_manager import SessionManager
 
         # 创建必要的管理器实例
         db_manager = DatabaseManager()
@@ -306,3 +370,12 @@ class SettingsDialog(QDialog):
 
         # 关闭数据库连接
         db_manager.close()
+
+    def on_database_type_changed(self, checked):
+        """数据库类型切换"""
+        if checked:  # 使用SQLite
+            self.sqlite_group.setVisible(True)
+            self.mysql_group.setVisible(False)
+        else:  # 使用MySQL
+            self.sqlite_group.setVisible(False)
+            self.mysql_group.setVisible(True)

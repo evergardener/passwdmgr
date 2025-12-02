@@ -6,6 +6,7 @@
 # @Python:  3.12
 # @Description:
 import logging
+import os
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QTextEdit, QStatusBar,
@@ -230,21 +231,28 @@ class MainWindow(QMainWindow):
 
     def setup_icons(self):
         """设置图标"""
+        # 获取图标管理器
+        icon_manager = self.icon_manager
+
         # 设置窗口图标
-        success = self.icon_manager.set_window_icon(self, "favicon")
+        success = icon_manager.set_window_icon(self, "favicon")
 
         if not success:
             # 如果 favicon 失败，尝试其他可能的图标名称
             alternative_names = ["icon", "app", "logo", "password", "lock"]
             for name in alternative_names:
-                if self.icon_manager.set_window_icon(self, name):
+                if icon_manager.set_window_icon(self, name):
                     print(f"使用备选图标: {name}")
                     break
             else:
                 print("警告: 无法设置任何窗口图标")
+                # 使用默认系统图标
+                from PyQt6.QtWidgets import QStyle
+                app_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+                self.setWindowIcon(app_icon)
 
         # 设置应用程序图标（影响任务栏等）
-        app_icon = self.icon_manager.get_icon("favicon")
+        app_icon = icon_manager.get_icon("favicon")
         if not app_icon.isNull():
             QApplication.setWindowIcon(app_icon)
 
@@ -761,30 +769,137 @@ class MainWindow(QMainWindow):
     def connect_to_database(self):
         """连接到数据库"""
         db_config = self.config_manager.get_database_config()
+        sqlite_path = db_config.get('sqlite_path', 'password_manager.db')
 
         # 调试信息
         print(f"主窗口获取的数据库配置: use_sqlite={db_config.get('use_sqlite')}")
+        print(f"SQLite文件路径: {sqlite_path}")
 
-        # 如果配置了使用 SQLite，直接连接
+        # 情况1：如果配置文件明确要求使用SQLite，则直接连接SQLite
         if db_config.get('use_sqlite', True):
-            print("使用 SQLite 数据库")
-            if self.database_manager.connect(db_config):
-                self.status_bar.showMessage("SQLite 数据库连接成功")
-                # 数据库连接成功后显示登录对话框
-                self.show_login_dialog()
-            else:
-                self.status_bar.showMessage("SQLite 数据库连接失败")
-        else:
-            # 使用 MySQL
-            if db_config.get('username') and db_config.get('password'):
-                if self.database_manager.connect(db_config):
-                    self.status_bar.showMessage("MySQL 数据库连接成功")
-                    # 数据库连接成功后显示登录对话框
+            print("配置要求使用 SQLite 数据库")
+
+            # 检查SQLite文件是否存在
+            if not os.path.exists(sqlite_path):
+                print(f"SQLite数据库文件不存在: {sqlite_path}")
+
+                # 检查是否配置了MySQL（作为备选）
+                mysql_configured = self._is_mysql_configured(db_config)
+                if mysql_configured:
+                    print("检测到MySQL配置，尝试连接MySQL...")
+                    # 询问用户是否使用已配置的MySQL
+                    if self._ask_use_mysql():
+                        # 临时切换到MySQL连接
+                        success = self.database_manager.connect(db_config)
+                        if success:
+                            self.status_bar.showMessage("MySQL 数据库连接成功")
+                            print("MySQL 连接成功")
+                            self.show_login_dialog()
+                            return
+                        else:
+                            print("MySQL 连接失败，继续SQLite流程")
+
+                # 没有MySQL配置或连接失败，创建新的SQLite数据库
+                QMessageBox.information(self, "首次使用",
+                                        "正在为您创建新的密码数据库。\n"
+                                        f"数据库文件: {sqlite_path}")
+                # 连接到SQLite（会自动创建文件）
+                success = self._connect_with_retry(db_config)
+                if success:
+                    self.status_bar.showMessage("已创建新的SQLite数据库")
                     self.show_login_dialog()
                 else:
-                    self.show_database_settings()
+                    QMessageBox.critical(self, "错误", "创建数据库失败")
+                    sys.exit(1)
             else:
+                # SQLite文件存在，直接静默连接
+                print(f"SQLite数据库文件已存在，直接连接")
+                success = self._connect_with_retry(db_config)
+                if success:
+                    self.status_bar.showMessage("SQLite 数据库已连接")
+                    print("SQLite 连接成功")
+                    self.show_login_dialog()
+                else:
+                    QMessageBox.critical(self, "错误", "无法连接SQLite数据库")
+                    sys.exit(1)
+
+        # 情况2：配置要求使用MySQL
+        else:
+            print("配置要求使用 MySQL 数据库")
+
+            # 检查MySQL配置是否完整
+            if not self._is_mysql_configured(db_config):
+                print("MySQL配置不完整，显示设置窗口")
                 self.show_database_settings()
+                return
+
+            # 尝试连接MySQL
+            success = self.database_manager.connect(db_config)
+            if success:
+                self.status_bar.showMessage("MySQL 数据库连接成功")
+                print("MySQL 连接成功")
+                self.show_login_dialog()
+            else:
+                print("MySQL 连接失败")
+                QMessageBox.warning(self, "连接失败",
+                                    "无法连接到MySQL数据库，请检查配置和网络连接")
+                # 询问是否切换到SQLite
+                reply = QMessageBox.question(
+                    self, "连接失败",
+                    "无法连接到MySQL数据库，是否切换到SQLite数据库？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+
+                if reply == QMessageBox.StandardButton.Yes:
+                    # 切换到SQLite
+                    db_config['use_sqlite'] = True
+                    self.config_manager.update_database_config(db_config)
+                    self.connect_to_database()  # 重新连接
+                else:
+                    # 显示设置窗口
+                    self.show_database_settings()
+
+    def _is_mysql_configured(self, db_config):
+        """检查MySQL配置是否完整"""
+        return all([
+            db_config.get('host'),
+            db_config.get('database'),
+            db_config.get('username'),
+            db_config.get('password')
+        ])
+
+    def _ask_use_mysql(self):
+        """询问用户是否使用已配置的MySQL数据库"""
+        reply = QMessageBox.question(
+            self, "数据库选择",
+            "检测到您已配置MySQL数据库，是否使用MySQL？\n\n"
+            "选择'是'：使用已配置的MySQL数据库\n"
+            "选择'否'：创建新的SQLite本地数据库",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
+    def _connect_with_retry(self, db_config, max_retries=2):
+        """带重试的数据库连接"""
+        for attempt in range(max_retries):
+            try:
+                success = self.database_manager.connect(db_config)
+                if success:
+                    return True
+
+                # 如果连接失败，可能是数据库文件被占用
+                if attempt < max_retries - 1:
+                    print(f"连接失败，重试 {attempt + 1}/{max_retries}")
+                    import time
+                    time.sleep(1)  # 等待1秒后重试
+
+            except Exception as e:
+                print(f"连接异常: {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(1)
+
+        return False
 
     def check_auto_lock(self):
         """检查自动锁定"""
@@ -805,6 +920,11 @@ class MainWindow(QMainWindow):
 
     def show_login_dialog(self):
         """显示登录对话框"""
+        # 检查数据库是否已连接
+        if not self.database_manager.connection:
+            QMessageBox.warning(self, "错误", "数据库未连接")
+            return
+
         dialog = LoginDialog(
             self.session_manager,
             self.encryption_manager,
@@ -1255,7 +1375,49 @@ class MainWindow(QMainWindow):
         """打开设置"""
         dialog = SettingsDialog(self.config_manager, self)
         if dialog.exec():
-            # 应用新设置
+            # 检查是否需要重新连接数据库
+            old_config = self.config_manager.get_database_config().copy()
+            dialog.load_settings()  # 重新加载以获取新配置
+            new_config = self.config_manager.get_database_config()
+
+            # 如果数据库类型发生了变化
+            if old_config.get('use_sqlite', True) != new_config.get('use_sqlite', True):
+                reply = QMessageBox.question(
+                    self, "数据库配置已更改",
+                    "数据库类型已更改，需要重新连接数据库。\n"
+                    "如果切换到MySQL，可能需要迁移数据。\n\n"
+                    "是否现在重新连接数据库?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+
+                if reply == QMessageBox.StandardButton.Yes:
+                    # 如果从SQLite切换到MySQL，询问是否需要迁移
+                    if old_config.get('use_sqlite', True) and not new_config.get('use_sqlite', True):
+                        reply2 = QMessageBox.question(
+                            self, "数据迁移",
+                            "您正在从SQLite切换到MySQL。\n"
+                            "是否迁移现有的数据到MySQL?\n\n"
+                            "选择'是'将启动数据迁移工具\n"
+                            "选择'否'将使用空的MySQL数据库",
+                            QMessageBox.StandardButton.Yes |
+                            QMessageBox.StandardButton.No |
+                            QMessageBox.StandardButton.Cancel
+                        )
+
+                        if reply2 == QMessageBox.StandardButton.Yes:
+                            # 启动数据迁移工具
+                            self.run_database_migration(old_config, new_config)
+                        elif reply2 == QMessageBox.StandardButton.No:
+                            # 直接重新连接
+                            self.connect_to_database()
+                        else:
+                            # 取消，恢复原配置
+                            self.config_manager.update_database_config(old_config)
+                    else:
+                        # MySQL切换到SQLite或其他情况
+                        self.connect_to_database()
+
+            # 应用其他设置
             ui_config = self.config_manager.get_ui_config()
             self.resize(ui_config.get('window_width', 1000),
                         ui_config.get('window_height', 600))
@@ -1263,11 +1425,44 @@ class MainWindow(QMainWindow):
             security_config = self.config_manager.get_security_config()
             self.session_manager.auto_lock_minutes = security_config.get('auto_lock_minutes', 15)
 
-    def show_database_settings(self):
+    def run_database_migration(self, old_config, new_config):
+        """运行数据库迁移"""
+        try:
+            # 导入迁移工具
+            from utils.database_migrate import DatabaseMigrator
+
+            # 创建迁移器
+            migrator = DatabaseMigrator()
+
+            # 执行迁移
+            if migrator.migrate():
+                # 迁移成功后重新连接
+                self.connect_to_database()
+            else:
+                # 迁移失败，恢复原配置
+                QMessageBox.warning(self, "迁移失败",
+                                    "数据迁移失败，已恢复原数据库配置")
+                self.config_manager.update_database_config(old_config)
+
+        except Exception as e:
+            print(f"迁移失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+            QMessageBox.critical(self, "错误",
+                                 f"数据库迁移失败: {str(e)}")
+            # 恢复原配置
+            self.config_manager.update_database_config(old_config)
+
+    def show_database_settings(self, show_welcome=False):
         """显示数据库设置对话框"""
         dialog = SettingsDialog(self.config_manager, self)
+        # 如果是首次使用，显示欢迎信息
+        if show_welcome:
+            dialog.setWindowTitle("首次设置 - 请选择数据库类型")
         if dialog.exec():
-            # 重新连接数据库
+            # 保存配置后，重新连接数据库
+            print("设置已保存，重新连接数据库...")
             self.connect_to_database()
 
     def closeEvent(self, event):
