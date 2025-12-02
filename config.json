@@ -1,0 +1,33 @@
+{
+    "database": {
+        "use_sqlite": true,
+        "sqlite_path": "password_manager.db",
+        "host": "localhost",
+        "port": 3306,
+        "database": "password_manager",
+        "username": "root",
+        "password": "root",
+        "use_ssl": false
+    },
+    "security": {
+        "auto_lock_minutes": 15,
+        "clear_clipboard_seconds": 30
+    },
+    "ui": {
+        "theme": "light",
+        "window_width": 1000,
+        "window_height": 600
+    },
+    "categories": [
+        "默认",
+        "工作",
+        "个人",
+        "金融",
+        "社交",
+        "邮箱",
+        "购物",
+        "娱乐",
+        "教育",
+        "其他"
+    ]
+}

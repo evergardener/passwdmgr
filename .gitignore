@@ -1,6 +1,5 @@
 .venv
 .idea
-config.json
 venv3.9
 *.db
 dist

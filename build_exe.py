@@ -35,7 +35,7 @@ def create_and_use_spec_file():
     # 定义需要打包的数据文件
     datas = [
         ('resources', 'resources'),  # 打包整个资源目录
-        ('config.json', '.'),
+        # ('config.json', '.'),
         ('*.db', '.'),  # 打包所有数据库文件
     ]
 
