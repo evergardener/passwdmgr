@@ -26,19 +26,15 @@ on:
     tags:
       - 'v*'  # 推送标签时自动触发
 
-env:
-  BUILD_WINDOWS: ${{ github.event.inputs.build_windows || true }}
-  BUILD_ARM64_QT5: ${{ github.event.inputs.build_arm64_qt5 || true }}
-  BUILD_ARM64_QT6: ${{ github.event.inputs.build_arm64_qt6 || true }}
-  VERSION: ${{ github.event.inputs.version || github.ref_name }}
-
 jobs:
   build-windows-x64:
-    if: ${{ env.BUILD_WINDOWS == 'true' }}
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build_windows == 'true') ||
+      (github.event_name == 'push')
     runs-on: windows-latest
     name: Build Windows x64 Executable
     outputs:
-      upload-name: PasswordManager-${{ env.VERSION }}-windows-x64.exe
+      upload-name: PasswordManager-${{ github.event.inputs.version || github.ref_name }}-windows-x64.exe
       upload-path: dist/PasswordManager.exe
 
     steps:
@@ -62,7 +58,8 @@ jobs:
         python build_exe.py --windows
         # 重命名输出文件
         if (Test-Path "dist/PasswordManager.exe") {
-          Move-Item "dist/PasswordManager.exe" "dist/PasswordManager-${{ env.VERSION }}-windows-x64.exe"
+          $version = "${{ github.event.inputs.version || github.ref_name }}"
+          Move-Item "dist/PasswordManager.exe" "dist/PasswordManager-$version-windows-x64.exe"
         }
 
     - name: Upload Windows artifact
@@ -70,19 +67,21 @@ jobs:
       with:
         name: windows-x64
         path: |
-          dist/PasswordManager-${{ env.VERSION }}-windows-x64.exe
+          dist/PasswordManager-*-windows-x64.exe
         retention-days: 7
 
   build-linux-arm64-qt5:
-    if: ${{ env.BUILD_ARM64_QT5 == 'true' }}
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build_arm64_qt5 == 'true') ||
+      (github.event_name == 'push')
     runs-on: ubuntu-latest  # 使用x64主机运行ARM容器
     name: Build Linux ARM64 Qt5 AppImage
     container:
       image: arm64v8/debian:buster-slim
       options: --privileged  # 需要特权模式运行fuse
     outputs:
-      upload-name: PasswordManager-${{ env.VERSION }}-linux-arm64-qt5.AppImage
-      upload-path: PasswordManager-${{ env.VERSION }}-linux-arm64-qt5.AppImage
+      upload-name: PasswordManager-${{ github.event.inputs.version || github.ref_name }}-linux-arm64-qt5.AppImage
+      upload-path: PasswordManager-${{ github.event.inputs.version || github.ref_name }}-linux-arm64-qt5.AppImage
 
     steps:
     - name: Checkout repository
@@ -147,8 +146,9 @@ jobs:
       run: |
         python build_arm64_qt5.py
         # 重命名输出文件
+        version="${{ github.event.inputs.version || github.ref_name }}"
         if [ -f "PasswordManager-arm64.AppImage" ]; then
-          mv "PasswordManager-arm64.AppImage" "PasswordManager-${{ env.VERSION }}-linux-arm64-qt5.AppImage"
+          mv "PasswordManager-arm64.AppImage" "PasswordManager-${version}-linux-arm64-qt5.AppImage"
         fi
 
     - name: Upload Qt5 artifact
@@ -156,19 +156,21 @@ jobs:
       with:
         name: linux-arm64-qt5
         path: |
-          PasswordManager-${{ env.VERSION }}-linux-arm64-qt5.AppImage
+          PasswordManager-*-linux-arm64-qt5.AppImage
         retention-days: 7
 
   build-linux-arm64-qt6:
-    if: ${{ env.BUILD_ARM64_QT6 == 'true' }}
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build_arm64_qt6 == 'true') ||
+      (github.event_name == 'push')
     runs-on: ubuntu-latest  # 使用x64主机运行ARM容器
     name: Build Linux ARM64 Qt6 AppImage
     container:
       image: arm64v8/debian:bullseye-slim  # 使用较新版本以支持Qt6
       options: --privileged
     outputs:
-      upload-name: PasswordManager-${{ env.VERSION }}-linux-arm64-qt6.AppImage
-      upload-path: PasswordManager-${{ env.VERSION }}-linux-arm64-qt6.AppImage
+      upload-name: PasswordManager-${{ github.event.inputs.version || github.ref_name }}-linux-arm64-qt6.AppImage
+      upload-path: PasswordManager-${{ github.event.inputs.version || github.ref_name }}-linux-arm64-qt6.AppImage
 
     steps:
     - name: Checkout repository
@@ -206,7 +208,7 @@ jobs:
           CairoSVG==2.8.2 \
           cffi==2.0.0 \
           cryptography==46.0.3 \
-          cssselect2==0.8.0 \
+          cssselect2==0.0.8 \
           defusedxml==0.7.1 \
           mysql==0.0.3 \
           mysql-connector-python==9.5.0 \
@@ -229,8 +231,9 @@ jobs:
       run: |
         python build_arm64_qt6.py
         # 重命名输出文件
+        version="${{ github.event.inputs.version || github.ref_name }}"
         if [ -f "PasswordManager-arm64.AppImage" ]; then
-          mv "PasswordManager-arm64.AppImage" "PasswordManager-${{ env.VERSION }}-linux-arm64-qt6.AppImage"
+          mv "PasswordManager-arm64.AppImage" "PasswordManager-${version}-linux-arm64-qt6.AppImage"
         fi
 
     - name: Upload Qt6 artifact
@@ -238,12 +241,13 @@ jobs:
       with:
         name: linux-arm64-qt6
         path: |
-          PasswordManager-${{ env.VERSION }}-linux-arm64-qt6.AppImage
+          PasswordManager-*-linux-arm64-qt6.AppImage
         retention-days: 7
 
   create-release:
     needs: [build-windows-x64, build-linux-arm64-qt5, build-linux-arm64-qt6]
-    if: always() && (needs.build-windows-x64.result == 'success' || needs.build-linux-arm64-qt5.result == 'success' || needs.build-linux-arm64-qt6.result == 'success')
+    if: |
+      (needs.build-windows-x64.result == 'success' || needs.build-linux-arm64-qt5.result == 'success' || needs.build-linux-arm64-qt6.result == 'success')
     runs-on: ubuntu-latest
     name: Create Release
     permissions:
@@ -258,14 +262,25 @@ jobs:
         echo "下载的构建产物:"
         find . -name "*.exe" -o -name "*.AppImage" | xargs ls -lh
 
+    - name: Determine version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${{ github.ref_name }}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ env.VERSION }}
-        name: "Password Manager ${{ env.VERSION }}"
+        tag_name: ${{ steps.get_version.outputs.version }}
+        name: "Password Manager ${{ steps.get_version.outputs.version }}"
         body: |
-          # Password Manager ${{ env.VERSION }}
+          # Password Manager ${{ steps.get_version.outputs.version }}
           
           多平台构建版本，包含：
           - Windows x86_64 可执行文件
@@ -275,7 +290,7 @@ jobs:
           ## 使用说明
           
           ### Windows
-          - 下载 `PasswordManager-${{ env.VERSION }}-windows-x64.exe`
+          - 下载 `PasswordManager-${{ steps.get_version.outputs.version }}-windows-x64.exe`
           - 直接运行即可
           
           ### Linux ARM64
@@ -326,4 +341,4 @@ jobs:
         
         echo "## 发布状态" >> $GITHUB_STEP_SUMMARY
         echo "- 状态: ${{ needs.create-release.result || '未执行' }}" >> $GITHUB_STEP_SUMMARY
-        echo "- 版本: ${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- 版本: ${{ steps.get_version.outputs.version || '未知' }}" >> $GITHUB_STEP_SUMMARY
