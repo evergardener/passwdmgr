@@ -5,10 +5,12 @@
 """
 import sys
 import os
-
-from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QApplication, QMainWindow, QMenuBar
-
+try:
+    from PyQt6.QtGui import QAction
+    from PyQt6.QtWidgets import QApplication, QMainWindow, QMenuBar
+except:
+    from PyQt5.QtWidgets import QAction
+    from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar
 # 临时添加路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

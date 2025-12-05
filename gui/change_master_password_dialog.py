@@ -5,10 +5,17 @@
 # @Updated: 2025/11/28 10:42
 # @Python:  3.12
 # @Description:
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-                             QLineEdit, QPushButton, QMessageBox, QFormLayout,
-                             QProgressDialog)
-from PyQt6.QtCore import Qt, QTimer
+
+try:
+    from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                                 QLineEdit, QPushButton, QMessageBox, QFormLayout,
+                                 QProgressDialog)
+    from PyQt6.QtCore import Qt, QTimer
+except ImportError:
+    from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                                 QLineEdit, QPushButton, QMessageBox, QFormLayout,
+                                 QProgressDialog)
+    from PyQt5.QtCore import Qt, QTimer
 import logging
 
 logger = logging.getLogger(__name__)

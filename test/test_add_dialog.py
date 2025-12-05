@@ -9,8 +9,10 @@
 import sys
 
 # sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from PyQt6.QtWidgets import QApplication
+try:
+    from PyQt6.QtWidgets import QApplication
+except:
+    from PyQt5.QtWidgets import QApplication
 from core.database_manager import DatabaseManager
 from core.encryption_manager import EncryptionManager
 from core.session_manager import SessionManager

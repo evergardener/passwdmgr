@@ -5,10 +5,17 @@
 # @Updated: 2025/11/27 8:05
 # @Python:  3.12
 # @Description:
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-                             QLineEdit, QPushButton, QMessageBox, QTextEdit,
-                             QComboBox, QCheckBox, QSpinBox, QGroupBox)
-from PyQt6.QtCore import Qt
+
+try:
+    from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                                 QLineEdit, QPushButton, QMessageBox, QTextEdit,
+                                 QComboBox, QCheckBox, QSpinBox, QGroupBox)
+    from PyQt6.QtCore import Qt
+except ImportError:
+    from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                                 QLineEdit, QPushButton, QMessageBox, QTextEdit,
+                                 QComboBox, QCheckBox, QSpinBox, QGroupBox)
+    from PyQt5.QtCore import Qt
 
 from models.password_entry import PasswordEntry
 

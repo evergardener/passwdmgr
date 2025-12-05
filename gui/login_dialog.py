@@ -6,9 +6,15 @@
 # @Python:  3.12
 # @Description:
 # 完整的 gui/login_dialog.py
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+
+try:
+    from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QMessageBox, QWidget)
-from PyQt6.QtCore import Qt
+    from PyQt6.QtCore import Qt
+except ImportError:
+    from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                             QLineEdit, QPushButton, QMessageBox, QWidget)
+    from PyQt5.QtCore import Qt
 from gui.icon_manager import get_icon_manager
 import logging
 

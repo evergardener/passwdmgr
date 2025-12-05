@@ -30,6 +30,16 @@
 
 ### appimage 构建
 
+```bash
+dnf install python3.12
+python3 -m venv build
+source build/bin/activate
+pip install PyQt6 --only-binary :all:
+pip install pyinstaller
+
+```
+
+
 1. 安装项目依赖： `pip install requirements.txt`;
 2. 运行 appimage 构建脚本：`build_arm64.py`;
 

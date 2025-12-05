@@ -11,8 +11,10 @@ from pathlib import Path
 # 添加项目根目录到 Python 路径
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
-
-from PyQt6.QtWidgets import QApplication, QMainWindow, QTextEdit
+try:
+    from PyQt6.QtWidgets import QApplication, QMainWindow, QTextEdit
+except:
+    from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit
 from gui.icon_manager import get_icon_manager
 from gui.menu_manager import MenuManager
 

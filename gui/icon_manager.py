@@ -13,9 +13,14 @@
 import os
 import sys
 from pathlib import Path
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
-from PyQt6.QtWidgets import QStyle, QApplication
-from PyQt6.QtCore import Qt
+try:
+    from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
+    from PyQt6.QtWidgets import QStyle, QApplication
+    from PyQt6.QtCore import Qt
+except ImportError:
+    from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
+    from PyQt5.QtWidgets import QStyle, QApplication
+    from PyQt5.QtCore import Qt
 import logging
 
 logger = logging.getLogger(__name__)

@@ -10,12 +10,11 @@ import sys
 import os
 import ctypes
 import logging
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt, QTimer
+try:
+    from PyQt6.QtWidgets import QApplication
+except:
+    from PyQt5.QtWidgets import QApplication
 import traceback
-# import resources
-
 sys.excepthook = lambda exctype, value, tb: (
     print(''.join(traceback.format_exception(exctype, value, tb))),
     sys.__excepthook__(exctype, value, tb)

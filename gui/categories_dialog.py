@@ -5,10 +5,16 @@
 # @Updated: 2025/11/28 8:31
 # @Python:  3.12
 # @Description:
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+
+try:
+    from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                             QListWidget, QListWidgetItem, QPushButton,
                             QMessageBox, QLineEdit, QInputDialog)
-from PyQt6.QtCore import Qt
+
+except ImportError:
+    from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                            QListWidget, QListWidgetItem, QPushButton,
+                            QMessageBox, QLineEdit, QInputDialog)
 
 
 class CategoriesDialog(QDialog):

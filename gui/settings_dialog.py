@@ -5,11 +5,16 @@
 # @Updated: 2025/11/27 8:05
 # @Python:  3.12
 # @Description:
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+try:
+    from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QMessageBox, QSpinBox,
                              QCheckBox, QTabWidget, QWidget, QFormLayout,
                              QGroupBox, QTextEdit)  # 添加 QTextEdit 导入
-from PyQt6.QtCore import Qt
+except:
+    from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                             QLineEdit, QPushButton, QMessageBox, QSpinBox,
+                             QCheckBox, QTabWidget, QWidget, QFormLayout,
+                             QGroupBox, QTextEdit)
 
 from gui.categories_dialog import CategoriesDialog
 from gui.change_master_password_dialog import ChangeMasterPasswordDialog

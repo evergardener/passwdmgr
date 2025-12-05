@@ -1,7 +1,8 @@
 .venv
 .idea
 venv3.9
-*.db
+password_manager.db
+password_manager.log
 dist
 build
 init

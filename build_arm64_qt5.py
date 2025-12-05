@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 #
-# @Created : 2025-12-02 14:05
+# @Created : 2025-12-05 19:27
 # @Author  : Evergarden
 # @Email   : violet20160719@163.com
 # @Python  : 3.12
-# @Desc    : arm64本地构建appimage
+# @Desc    :
+# -*- coding: utf-8 -*-
+# arm64本地构建appimage - PyQt5版本
 
 
 import os
@@ -14,27 +16,28 @@ import shutil
 import platform
 from pathlib import Path
 
-def get_pyqt6_paths():
-    """获取PyQt6的安装路径和库文件路径"""
-    import PyQt6
-    from PyQt6 import QtCore
 
-    pyqt6_path = Path(PyQt6.__file__).parent
+def get_pyqt5_paths():
+    """获取PyQt5的安装路径和库文件路径"""
+    import PyQt5
+    from PyQt5 import QtCore
+
+    pyqt5_path = Path(PyQt5.__file__).parent
     qt_path = None
 
     # 尝试找到Qt库的安装位置
     try:
-        # 通过QtCore获取Qt库路径
-        qt_path = Path(QtCore.QLibraryInfo.path(QtCore.QLibraryInfo.LibraryPath.LibrariesPath))
+        # 通过QtCore获取Qt库路径（PyQt5的API与PyQt6不同）
+        qt_path = Path(QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.LibrariesPath))
     except:
         # 回退到标准路径
         if sys.platform == "linux":
-            # Linux下常见的Qt安装路径
+            # Linux下常见的Qt5安装路径
             possible_paths = [
-                "/usr/lib/aarch64-linux-gnu/qt6",
-                "/usr/lib/qt6",
-                "/usr/local/lib/qt6",
-                str(Path.home() / ".local/lib/qt6"),
+                "/usr/lib/aarch64-linux-gnu/qt5",
+                "/usr/lib/qt5",
+                "/usr/local/lib/qt5",
+                str(Path.home() / ".local/lib/qt5"),
             ]
 
             for path in possible_paths:
@@ -43,23 +46,24 @@ def get_pyqt6_paths():
                     break
 
     return {
-        'pyqt6_python': pyqt6_path,
+        'pyqt5_python': pyqt5_path,
         'qt_libs': qt_path,
     }
 
-def collect_qt_libraries():
-    """收集Qt6运行时库"""
-    print("收集Qt6运行时库...")
 
-    qt_paths = get_pyqt6_paths()
+def collect_qt_libraries():
+    """收集Qt5运行时库"""
+    print("收集Qt5运行时库...")
+
+    qt_paths = get_pyqt5_paths()
     libraries_to_copy = []
 
-    # 必需的Qt6核心库
+    # 必需的Qt5核心库
     qt_libs = [
-        'libQt6Core.so',
-        'libQt6Gui.so',
-        'libQt6Widgets.so',
-        'libQt6DBus.so',  # DBus支持
+        'libQt5Core.so',
+        'libQt5Gui.so',
+        'libQt5Widgets.so',
+        'libQt5DBus.so',  # DBus支持
     ]
 
     # 查找这些库
@@ -97,17 +101,18 @@ def collect_qt_libraries():
 
     return found_libs
 
-def create_fixed_spec_file():
-    """创建修复的spec文件，确保PyQt6被正确打包"""
 
-    # 获取PyQt6路径
-    import PyQt6
-    pyqt6_path = Path(PyQt6.__file__).parent
+def create_fixed_spec_file():
+    """创建修复的spec文件，确保PyQt5被正确打包"""
+
+    # 获取PyQt5路径
+    import PyQt5
+    pyqt5_path = Path(PyQt5.__file__).parent
 
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
 block_cipher = None
 
-# 添加PyQt6的路径到分析路径
+# 添加PyQt5的路径到分析路径
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -117,31 +122,31 @@ a = Analysis(
         ('resources', 'resources'),
         # ('config.json', '.'),
         # ('*.db', '.'),
-        
-        # 关键：打包PyQt6的Python模块
-        ('{pyqt6_path}', 'PyQt6'),
-        
+
+        # 关键：打包PyQt5的Python模块
+        ('{pyqt5_path}', 'PyQt5'),
+
         # 打包Qt插件
-        ('/usr/lib/aarch64-linux-gnu/qt6/plugins', 'qt6/plugins'),
-        
+        ('/usr/lib/aarch64-linux-gnu/qt5/plugins', 'qt5/plugins'),
+
         # arm64 本地打包注释以下行
-        # ('/usr/lib/qt6/plugins', 'qt6/plugins'),
+        # ('/usr/lib/qt5/plugins', 'qt5/plugins'),
     ],
     hiddenimports=[
-        'PyQt6',
-        'PyQt6.QtCore',
-        'PyQt6.QtGui',
-        'PyQt6.QtWidgets',
-        'PyQt6.QtDBus',
-        'PyQt6.sip',
-        
+        'PyQt5',
+        'PyQt5.QtCore',
+        'PyQt5.QtGui',
+        'PyQt5.QtWidgets',
+        'PyQt5.QtDBus',
+        'PyQt5.sip',
+
         'cryptography',
         'cryptography.hazmat.backends.openssl',
         'cryptography.hazmat.primitives.ciphers',
         'cryptography.hazmat.primitives.kdf.pbkdf2',
-        
+
         'mysql.connector',
-        
+
         'PIL',
         'PIL.Image',
         'PIL.ImageFile',
@@ -152,7 +157,7 @@ a = Analysis(
     runtime_hooks=['runtime_hook.py'],  # 添加运行时钩子
     excludes=['tkinter', 'test', 'unittest'],
     noarchive=False,
-    optimize=0,
+    # optimize=0,
 )
 
 # 收集二进制文件
@@ -187,6 +192,7 @@ exe = EXE(
 
     print("✓ 创建修复的spec文件")
 
+
 def create_runtime_hook():
     """创建运行时钩子，设置Qt环境变量"""
 
@@ -199,7 +205,7 @@ import sys
 
 def setup_qt_environment():
     """设置Qt环境变量"""
-    
+
     # 获取程序所在目录
     if getattr(sys, 'frozen', False):
         # 打包后的程序
@@ -207,46 +213,46 @@ def setup_qt_environment():
     else:
         # 开发环境
         base_path = os.path.dirname(os.path.abspath(__file__))
-    
+
     # 设置Qt插件路径
     qt_plugin_paths = []
-    
+
     # 在打包目录中查找插件
     possible_plugin_dirs = [
-        os.path.join(base_path, 'qt6', 'plugins'),
-        os.path.join(base_path, 'PyQt6', 'Qt6', 'plugins'),
-        os.path.join(base_path, 'Qt6', 'plugins'),
+        os.path.join(base_path, 'qt5', 'plugins'),
+        os.path.join(base_path, 'PyQt5', 'Qt5', 'plugins'),
+        os.path.join(base_path, 'Qt5', 'plugins'),
     ]
-    
+
     for plugin_dir in possible_plugin_dirs:
         if os.path.exists(plugin_dir):
             qt_plugin_paths.append(plugin_dir)
-    
+
     # 如果找到了插件路径，设置环境变量
     if qt_plugin_paths:
         os.environ['QT_PLUGIN_PATH'] = ':'.join(qt_plugin_paths)
         print(f"设置 QT_PLUGIN_PATH: {os.environ['QT_PLUGIN_PATH']}")
-    
+
     # 设置Qt库路径
     qt_lib_paths = []
     possible_lib_dirs = [
-        os.path.join(base_path, 'qt6', 'lib'),
+        os.path.join(base_path, 'qt5', 'lib'),
         os.path.join(base_path, 'lib'),
-        os.path.join(base_path, 'PyQt6', 'Qt6', 'lib'),
+        os.path.join(base_path, 'PyQt5', 'Qt5', 'lib'),
     ]
-    
+
     for lib_dir in possible_lib_dirs:
         if os.path.exists(lib_dir):
             qt_lib_paths.append(lib_dir)
-    
+
     if qt_lib_paths:
         os.environ['LD_LIBRARY_PATH'] = ':'.join(qt_lib_paths) + ':' + os.environ.get('LD_LIBRARY_PATH', '')
-    
+
     # 设置平台插件（对于AppImage很重要）
-    os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(base_path, 'qt6', 'plugins', 'platforms')
-    
-    # 设置QML导入路径
-    os.environ['QML2_IMPORT_PATH'] = os.path.join(base_path, 'qt6', 'qml')
+    os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(base_path, 'qt5', 'plugins', 'platforms')
+
+    # 设置QML导入路径（如果需要）
+    os.environ['QML_IMPORT_PATH'] = os.path.join(base_path, 'qt5', 'qml')
 
 # 在模块导入前执行
 setup_qt_environment()
@@ -257,11 +263,12 @@ setup_qt_environment()
 
     print("✓ 创建运行时钩子")
 
-def build_with_pyqt6_fix():
-    """修复PyQt6问题的构建"""
+
+def build_with_pyqt5_fix():
+    """修复PyQt5问题的构建"""
 
     print("=" * 60)
-    print("修复PyQt6依赖问题的ARM64构建")
+    print("修复PyQt5依赖问题的ARM64构建")
     print("=" * 60)
 
     # 清理旧文件
@@ -298,7 +305,7 @@ def build_with_pyqt6_fix():
             # 检查文件信息
             try:
                 file_result = subprocess.run(['file', exe_path],
-                                           capture_output=True, text=True)
+                                             capture_output=True, text=True)
                 print(f"文件信息: {file_result.stdout}")
             except:
                 pass
@@ -306,7 +313,7 @@ def build_with_pyqt6_fix():
             # 检查依赖
             try:
                 ldd_result = subprocess.run(['ldd', exe_path],
-                                          capture_output=True, text=True)
+                                            capture_output=True, text=True)
                 print("依赖检查:")
                 print(ldd_result.stdout[:500])  # 只显示前500字符
             except:
@@ -317,6 +324,7 @@ def build_with_pyqt6_fix():
         print("❌ 构建失败")
         print(f"错误: {result.stderr}")
         return False
+
 
 def create_appdir_with_qt():
     """创建包含Qt运行时库的AppDir"""
@@ -333,12 +341,17 @@ def create_appdir_with_qt():
     dirs = [
         f"{appdir}/usr/bin",
         f"{appdir}/usr/lib",
-        f"{appdir}/usr/lib/qt6",
-        f"{appdir}/usr/lib/qt6/plugins",
-        f"{appdir}/usr/lib/qt6/plugins/platforms",
+        f"{appdir}/usr/lib/qt5",
+        f"{appdir}/usr/lib/qt5/plugins",
+        f"{appdir}/usr/lib/qt5/plugins/platforms",
         f"{appdir}/usr/share/applications",
         f"{appdir}/usr/share/icons/hicolor/256x256/apps",
-
+        f"{appdir}/usr/share/icons/hicolor/128x128/apps",
+        f"{appdir}/usr/share/icons/hicolor/64x64/apps",
+        f"{appdir}/usr/share/icons/hicolor/48x48/apps",
+        f"{appdir}/usr/share/icons/hicolor/32x32/apps",
+        f"{appdir}/usr/share/icons/hicolor/16x16/apps",
+        f"{appdir}/usr/share/metainfo",
     ]
 
     for d in dirs:
@@ -369,7 +382,7 @@ def create_appdir_with_qt():
     # 复制资源文件
     if os.path.exists("resources"):
         shutil.copytree("resources", f"{appdir}/usr/share/passwordmanager/resources",
-                       dirs_exist_ok=True)
+                        dirs_exist_ok=True)
         print("✓ 复制资源文件")
 
     # 创建桌面文件
@@ -384,15 +397,16 @@ def create_appdir_with_qt():
     print(f"\n✅ AppDir 创建完成: {appdir}")
     return True
 
-def copy_qt_plugins(appdir):
-    """复制Qt插件"""
-    print("复制Qt插件...")
 
-    # Qt插件源路径
+def copy_qt_plugins(appdir):
+    """复制Qt5插件"""
+    print("复制Qt5插件...")
+
+    # Qt5插件源路径
     plugin_sources = [
-        '/usr/lib/aarch64-linux-gnu/qt6/plugins',
-        '/usr/lib/qt6/plugins',
-        '/usr/local/lib/qt6/plugins',
+        '/usr/lib/aarch64-linux-gnu/qt5/plugins',
+        '/usr/lib/qt5/plugins',
+        '/usr/local/lib/qt5/plugins',
     ]
 
     plugin_source = None
@@ -407,8 +421,8 @@ def copy_qt_plugins(appdir):
             platforms_src = os.path.join(plugin_source, 'platforms')
             if os.path.exists(platforms_src):
                 shutil.copytree(platforms_src,
-                              f"{appdir}/usr/lib/qt6/plugins/platforms",
-                              dirs_exist_ok=True)
+                                f"{appdir}/usr/lib/qt5/plugins/platforms",
+                                dirs_exist_ok=True)
                 print("✓ 复制平台插件")
 
             # 复制其他重要插件
@@ -416,13 +430,14 @@ def copy_qt_plugins(appdir):
                 plugin_src = os.path.join(plugin_source, plugin_type)
                 if os.path.exists(plugin_src):
                     shutil.copytree(plugin_src,
-                                  f"{appdir}/usr/lib/qt6/plugins/{plugin_type}",
-                                  dirs_exist_ok=True)
+                                    f"{appdir}/usr/lib/qt5/plugins/{plugin_type}",
+                                    dirs_exist_ok=True)
                     print(f"✓ 复制 {plugin_type} 插件")
         except Exception as e:
             print(f"✗ 复制插件失败: {e}")
     else:
-        print("✗ 未找到Qt插件")
+        print("✗ 未找到Qt5插件")
+
 
 def create_desktop_file(appdir):
     """创建桌面文件"""
@@ -446,6 +461,7 @@ X-AppImage-Version=1.0.0
     # 复制到标准位置
     shutil.copy(desktop_path, f"{appdir}/usr/share/applications/")
     print("✓ 创建桌面文件")
+
 
 def copy_icon(appdir):
     """复制图标"""
@@ -487,6 +503,7 @@ def copy_icon(appdir):
     os.symlink('usr/share/icons/hicolor/256x256/apps/passwordmanager.png', 'passwordmanager.png')
     os.chdir('..')
 
+
 def create_default_icon(path):
     """创建默认图标"""
     try:
@@ -515,16 +532,17 @@ def create_default_icon(path):
 
         # 绘制锁图标
         draw.text((128, 128), "🔐", font=font, anchor="mm",
-                 fill=(255, 255, 255, 255))
+                  fill=(255, 255, 255, 255))
         img.save(path)
     except Exception as e:
         print(f"创建默认图标失败: {e}")
+
 
 def create_apprun(appdir):
     """创建修复的AppRun脚本"""
 
     apprun_content = '''#!/bin/bash
-# 修复版AppRun脚本 - 专门解决PyQt6依赖问题
+# 修复版AppRun脚本 - 专门解决PyQt5依赖问题
 
 set -e
 
@@ -537,12 +555,12 @@ export PATH="${HERE}/usr/bin:${PATH}"
 
 # 设置库路径 - 关键修复
 export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
-export LD_LIBRARY_PATH="${HERE}/usr/lib/qt6:${LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="${HERE}/usr/lib/qt5:${LD_LIBRARY_PATH}"
 
 # 设置Qt环境变量 - 关键修复
-export QT_PLUGIN_PATH="${HERE}/usr/lib/qt6/plugins"
-export QT_QPA_PLATFORM_PLUGIN_PATH="${HERE}/usr/lib/qt6/plugins/platforms"
-export QML2_IMPORT_PATH="${HERE}/usr/lib/qt6/qml"
+export QT_PLUGIN_PATH="${HERE}/usr/lib/qt5/plugins"
+export QT_QPA_PLATFORM_PLUGIN_PATH="${HERE}/usr/lib/qt5/plugins/platforms"
+export QML_IMPORT_PATH="${HERE}/usr/lib/qt5/qml"
 
 # 设置Python路径
 export PYTHONPATH="${HERE}/usr/share/passwordmanager:${PYTHONPATH}"
@@ -559,8 +577,8 @@ ls -la "${HERE}/usr/lib/" | grep -i qt || echo "未找到Qt库"
 
 # 检查Qt插件
 echo "检查Qt插件..."
-ls -la "${HERE}/usr/lib/qt6/plugins/" 2>/dev/null || echo "未找到插件目录"
-ls -la "${HERE}/usr/lib/qt6/plugins/platforms/" 2>/dev/null || echo "未找到平台插件"
+ls -la "${HERE}/usr/lib/qt5/plugins/" 2>/dev/null || echo "未找到插件目录"
+ls -la "${HERE}/usr/lib/qt5/plugins/platforms/" 2>/dev/null || echo "未找到平台插件"
 
 # 检查可执行文件
 echo "检查可执行文件..."
@@ -594,6 +612,7 @@ exec "${HERE}/usr/bin/PasswordManager" "$@"
 
     os.chmod(apprun_path, 0o755)
     print("✓ 创建修复的AppRun脚本")
+
 
 def package_appimage():
     """打包AppImage"""
@@ -650,6 +669,7 @@ def package_appimage():
         print(f"错误: {result.stderr}")
         return False
 
+
 def test_appimage():
     """测试AppImage"""
 
@@ -666,9 +686,10 @@ def test_appimage():
 
     # 运行测试命令
     print("运行测试命令...")
+    appimage = f"./{appimage}"
     try:
         result = subprocess.run([appimage, '--appimage-help'],
-                              capture_output=True, text=True)
+                                capture_output=True, text=True)
         if result.returncode == 0:
             print("✅ AppImage测试通过")
         else:
@@ -678,24 +699,25 @@ def test_appimage():
     except Exception as e:
         print(f"❌ 运行测试时出错: {e}")
 
+
 def main():
     """主函数"""
     print("=" * 60)
-    print("Password Manager ARM64 AppImage修复构建工具")
-    print("专门解决PyQt6模块缺失问题")
+    print("Password Manager ARM64 AppImage修复构建工具 - PyQt5版本")
+    print("专门解决PyQt5模块缺失问题")
     print("=" * 60)
 
     try:
         # 检查必要模块
-        import PyQt6
-        print("✓ PyQt6 已安装")
+        import PyQt5
+        print("✓ PyQt5 已安装")
     except ImportError:
-        print("✗ PyQt6 未安装，正在安装...")
-        subprocess.run([sys.executable, '-m', 'pip', 'install', 'PyQt6'], check=True)
+        print("✗ PyQt5 未安装，正在安装...")
+        subprocess.run([sys.executable, '-m', 'pip', 'install', 'PyQt5'], check=True)
 
     # 构建流程
-    print("\n1. 修复PyQt6依赖并构建...")
-    if not build_with_pyqt6_fix():
+    print("\n1. 修复PyQt5依赖并构建...")
+    if not build_with_pyqt5_fix():
         return
 
     print("\n2. 创建AppDir结构...")
@@ -717,6 +739,7 @@ def main():
     print("  chmod +x PasswordManager-arm64.AppImage")
     print("  ./PasswordManager-arm64.AppImage")
     print("\n如果仍有问题，请查看AppRun脚本中的调试信息")
+
 
 if __name__ == "__main__":
     main()

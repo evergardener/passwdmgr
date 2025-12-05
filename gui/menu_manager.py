@@ -5,9 +5,12 @@
 # @Email   : violet20160719@163.com
 # @Python  : 3.12
 # @Desc    :
-from PyQt6.QtWidgets import QMenu
-from PyQt6.QtGui import QAction
-
+try:
+    from PyQt6.QtWidgets import QMenu
+    from PyQt6.QtGui import QAction
+except:
+    from PyQt5.QtWidgets import QMenu
+    from PyQt5.QtWidgets import QAction
 
 class MenuManager:
     """菜单管理器"""

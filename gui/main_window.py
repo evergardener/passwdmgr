@@ -7,12 +7,20 @@
 # @Description:
 import logging
 import os
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+try:
+    from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QTextEdit, QStatusBar,
                              QToolBar, QMessageBox, QSplitter, QLabel, QApplication, QDialog)
-from PyQt6.QtCore import Qt, QTimer, QSize
-from PyQt6.QtGui import QAction
+    from PyQt6.QtCore import Qt, QTimer, QSize
+    from PyQt6.QtGui import QAction
+except ImportError:
+    from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                             QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
+                             QHeaderView, QTextEdit, QStatusBar,
+                             QToolBar, QMessageBox, QSplitter, QLabel, QApplication, QDialog)
+    from PyQt5.QtCore import Qt, QTimer, QSize
+    from PyQt5.QtWidgets import QAction
 
 from core.database_manager import DatabaseManager
 from core.encryption_manager import EncryptionManager
@@ -29,7 +37,7 @@ from gui.menu_manager import MenuManager
 logger = logging.getLogger(__name__)
 
 
-class MainWindow(QMainWindow):
+class  MainWindow(QMainWindow):
     """主窗口"""
 
     def __init__(self, config_manager: ConfigManager, session_manager: SessionManager):
@@ -247,7 +255,7 @@ class MainWindow(QMainWindow):
             else:
                 print("警告: 无法设置任何窗口图标")
                 # 使用默认系统图标
-                from PyQt6.QtWidgets import QStyle
+                from PyQt5.QtWidgets import QStyle
                 app_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
                 self.setWindowIcon(app_icon)
 
@@ -462,8 +470,8 @@ class MainWindow(QMainWindow):
                 exit_icon = self.icon_manager.get_icon("close")
                 if exit_icon.isNull():
                     # 如果都没有，使用系统标准图标
-                    from PyQt6.QtGui import QIcon
-                    from PyQt6.QtWidgets import QStyle
+                    from PyQt5.QtGui import QIcon
+                    from PyQt5.QtWidgets import QStyle
                     exit_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton)
 
         if not exit_icon.isNull():
