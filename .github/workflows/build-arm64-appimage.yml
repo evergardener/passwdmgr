@@ -54,6 +54,8 @@ jobs:
         pip install pyinstaller pillow
 
     - name: Build Windows executable
+      env:
+        PYTHONIOENCODING: utf-8
       run: |
         python build_exe.py --windows
         # 重命名输出文件
@@ -78,7 +80,7 @@ jobs:
     name: Build Linux ARM64 Qt5 AppImage
     container:
       image: arm64v8/debian:buster-slim
-      options: --privileged  # 需要特权模式运行fuse
+      options: --privileged --platform=linux/arm64  # 需要特权模式运行fuse
     outputs:
       upload-name: PasswordManager-${{ github.event.inputs.version || github.ref_name }}-linux-arm64-qt5.AppImage
       upload-path: PasswordManager-${{ github.event.inputs.version || github.ref_name }}-linux-arm64-qt5.AppImage
@@ -167,7 +169,7 @@ jobs:
     name: Build Linux ARM64 Qt6 AppImage
     container:
       image: arm64v8/debian:bullseye-slim  # 使用较新版本以支持Qt6
-      options: --privileged
+      options: --privileged --platform=linux/arm64
     outputs:
       upload-name: PasswordManager-${{ github.event.inputs.version || github.ref_name }}-linux-arm64-qt6.AppImage
       upload-path: PasswordManager-${{ github.event.inputs.version || github.ref_name }}-linux-arm64-qt6.AppImage
