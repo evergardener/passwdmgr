@@ -30,18 +30,27 @@
 
 ### appimage 构建
 
+#### QT6 with Python3.12
+
+如果使用较新版本的目标系统（默认仓库源就是Python3.11+），建议使用 Qt6 + Python3.12。以虚拟机/Docker方式都可以，建议用虚拟机方便验证。
+
 ```bash
 dnf install python3.12
 python3 -m venv build
 source build/bin/activate
-pip install PyQt6 --only-binary :all:
-pip install pyinstaller
+pip install -r requirements.txt
 
+# 如果编译安装报错，请使用下面的命令安装
+# pip install PyQt6 --only-binary :all: 
+# pip install pyinstaller
+
+python3 build_arm64_qt6.py
 ```
 
+#### QT5 with Python3.7
 
-1. 安装项目依赖： `pip install requirements.txt`;
-2. 运行 appimage 构建脚本：`build_arm64.py`;
+操作同上，只需将 `build_arm64_qt6.py` 替换为 `build_arm64_qt5.py` 即可。
+
 
 
 ## AI使用声明

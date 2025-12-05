@@ -1,12 +1,19 @@
 # -*- coding: utf-8 -*-
 #
-# @Created : 2025-12-05 19:27
+# @Created : 2025-12-02 14:05
 # @Author  : Evergarden
 # @Email   : violet20160719@163.com
 # @Python  : 3.12
-# @Desc    :
+# @Desc    : arm64本地构建appimage - PyQt5版本
+
+
 # -*- coding: utf-8 -*-
-# arm64本地构建appimage - PyQt5版本
+#
+# @Created : 2025-12-02 14:05
+# @Author  : Evergarden
+# @Email   : violet20160719@163.com
+# @Python  : 3.12
+# @Desc    : arm64本地构建appimage - PyQt5版本
 
 
 import os
@@ -15,6 +22,20 @@ import subprocess
 import shutil
 import platform
 from pathlib import Path
+
+
+# 兼容Python 3.7的copytree函数
+def copytree_py37(src, dst, symlinks=False, ignore=None):
+    """兼容Python 3.7的目录复制函数"""
+    if not os.path.exists(dst):
+        os.makedirs(dst)
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            copytree_py37(s, d, symlinks, ignore)
+        else:
+            shutil.copy2(s, d)
 
 
 def get_pyqt5_paths():
@@ -157,7 +178,7 @@ a = Analysis(
     runtime_hooks=['runtime_hook.py'],  # 添加运行时钩子
     excludes=['tkinter', 'test', 'unittest'],
     noarchive=False,
-    # optimize=0,
+    # optimize=0, # pyinstaller > 5.8 后，optimize参数可用
 )
 
 # 收集二进制文件
@@ -381,8 +402,10 @@ def create_appdir_with_qt():
 
     # 复制资源文件
     if os.path.exists("resources"):
-        shutil.copytree("resources", f"{appdir}/usr/share/passwordmanager/resources",
-                        dirs_exist_ok=True)
+        dest_dir = f"{appdir}/usr/share/passwordmanager/resources"
+        if not os.path.exists(os.path.dirname(dest_dir)):
+            os.makedirs(os.path.dirname(dest_dir))
+        copytree_py37("resources", dest_dir)
         print("✓ 复制资源文件")
 
     # 创建桌面文件
@@ -420,18 +443,20 @@ def copy_qt_plugins(appdir):
             # 复制平台插件（必需）
             platforms_src = os.path.join(plugin_source, 'platforms')
             if os.path.exists(platforms_src):
-                shutil.copytree(platforms_src,
-                                f"{appdir}/usr/lib/qt5/plugins/platforms",
-                                dirs_exist_ok=True)
+                platforms_dst = f"{appdir}/usr/lib/qt5/plugins/platforms"
+                if os.path.exists(platforms_dst):
+                    shutil.rmtree(platforms_dst)
+                copytree_py37(platforms_src, platforms_dst)
                 print("✓ 复制平台插件")
 
             # 复制其他重要插件
             for plugin_type in ['platformthemes', 'imageformats', 'styles']:
                 plugin_src = os.path.join(plugin_source, plugin_type)
                 if os.path.exists(plugin_src):
-                    shutil.copytree(plugin_src,
-                                    f"{appdir}/usr/lib/qt5/plugins/{plugin_type}",
-                                    dirs_exist_ok=True)
+                    plugin_dst = f"{appdir}/usr/lib/qt5/plugins/{plugin_type}"
+                    if os.path.exists(plugin_dst):
+                        shutil.rmtree(plugin_dst)
+                    copytree_py37(plugin_src, plugin_dst)
                     print(f"✓ 复制 {plugin_type} 插件")
         except Exception as e:
             print(f"✗ 复制插件失败: {e}")
@@ -499,7 +524,12 @@ def copy_icon(appdir):
 
     # 创建图标链接
     os.chdir(appdir)
+    if os.path.exists('.DirIcon'):
+        os.remove('.DirIcon')
     os.symlink('usr/share/icons/hicolor/256x256/apps/passwordmanager.png', '.DirIcon')
+
+    if os.path.exists('passwordmanager.png'):
+        os.remove('passwordmanager.png')
     os.symlink('usr/share/icons/hicolor/256x256/apps/passwordmanager.png', 'passwordmanager.png')
     os.chdir('..')
 
@@ -507,35 +537,53 @@ def copy_icon(appdir):
 def create_default_icon(path):
     """创建默认图标"""
     try:
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw
         img = Image.new('RGBA', (256, 256), color=(74, 144, 226, 255))
         draw = ImageDraw.Draw(img)
 
-        # 尝试使用DejaVu字体
-        font_paths = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-        ]
+        # 使用默认字体（不支持表情符号时的备用方案）
+        try:
+            # 尝试导入ImageFont
+            from PIL import ImageFont
 
-        font = None
-        for font_path in font_paths:
-            if os.path.exists(font_path):
-                try:
-                    font = ImageFont.truetype(font_path, 100)
-                    break
-                except:
-                    pass
+            # 尝试使用DejaVu字体
+            font_paths = [
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            ]
 
-        if not font:
-            # 使用默认字体
-            font = ImageFont.load_default()
+            font = None
+            for font_path in font_paths:
+                if os.path.exists(font_path):
+                    try:
+                        font = ImageFont.truetype(font_path, 120)
+                        break
+                    except:
+                        pass
+        except ImportError:
+            font = None
 
-        # 绘制锁图标
-        draw.text((128, 128), "🔐", font=font, anchor="mm",
-                  fill=(255, 255, 255, 255))
+        if font:
+            # 绘制锁符号（使用文本）
+            draw.text((128, 128), "🔒", font=font, anchor="mm",
+                      fill=(255, 255, 255, 255))
+        else:
+            # 绘制简单的锁图标
+            draw.rectangle([80, 100, 176, 150], fill=(255, 255, 255, 255))
+            draw.ellipse([100, 80, 156, 136], fill=(255, 255, 255, 255))
+
         img.save(path)
     except Exception as e:
         print(f"创建默认图标失败: {e}")
+        # 如果PIL不可用，创建一个简单的PNG文件
+        try:
+            # 创建一个简单的纯色图标
+            with open(path, 'wb') as f:
+                # 这是一个简单的1x1像素的PNG
+                f.write(
+                    b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x00\x1d\x08\x02\xa0\x00\x00\x00\x00IEND\xaeB`\x82')
+        except:
+            pass
 
 
 def create_apprun(appdir):
@@ -634,17 +682,23 @@ def package_appimage():
 
     if not appimagetool_path:
         print("下载appimagetool...")
-        subprocess.run([
-            'wget', '-q',
-            'https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage',
-            '-O', 'appimagetool'
-        ], check=True)
-        os.chmod('appimagetool', 0o755)
-        appimagetool_path = './appimagetool'
+        try:
+            subprocess.run([
+                'wget', '-q',
+                'https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage',
+                '-O', 'appimagetool'
+            ], check=True, capture_output=True)
+            os.chmod('appimagetool', 0o755)
+            appimagetool_path = './appimagetool'
+        except Exception as e:
+            print(f"下载appimagetool失败: {e}")
+            return False
 
     # 打包AppImage
     output = "PasswordManager-arm64.AppImage"
     cmd = [appimagetool_path, 'PasswordManager.AppDir', output]
+    # Docker 容器内没有 fuse
+    cmd = [appimagetool_path, 'PasswordManager.AppDir', output, '--appimage-extract-and-run']
 
     # 设置架构
     env = os.environ.copy()
@@ -713,7 +767,11 @@ def main():
         print("✓ PyQt5 已安装")
     except ImportError:
         print("✗ PyQt5 未安装，正在安装...")
-        subprocess.run([sys.executable, '-m', 'pip', 'install', 'PyQt5'], check=True)
+        try:
+            subprocess.run([sys.executable, '-m', 'pip', 'install', 'PyQt5'], check=True)
+        except Exception as e:
+            print(f"安装PyQt5失败: {e}")
+            return
 
     # 构建流程
     print("\n1. 修复PyQt5依赖并构建...")
