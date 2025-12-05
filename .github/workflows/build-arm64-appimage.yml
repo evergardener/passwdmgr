@@ -1,309 +1,329 @@
-name: Build and Release
+name: Build Multi-Platform Releases
 
 on:
+  workflow_dispatch:  # 允许手动触发
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      build_windows:
+        description: 'Build Windows x86_64'
+        required: true
+        type: boolean
+        default: true
+      build_arm64_qt5:
+        description: 'Build ARM64 Qt5 AppImage'
+        required: true
+        type: boolean
+        default: true
+      build_arm64_qt6:
+        description: 'Build ARM64 Qt6 AppImage'
+        required: true
+        type: boolean
+        default: true
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*'  # 推送标签时自动触发
+
+env:
+  BUILD_WINDOWS: ${{ github.event.inputs.build_windows || true }}
+  BUILD_ARM64_QT5: ${{ github.event.inputs.build_arm64_qt5 || true }}
+  BUILD_ARM64_QT6: ${{ github.event.inputs.build_arm64_qt6 || true }}
+  VERSION: ${{ github.event.inputs.version || github.ref_name }}
 
 jobs:
-  build-windows-x86_64:
+  build-windows-x64:
+    if: ${{ env.BUILD_WINDOWS == 'true' }}
     runs-on: windows-latest
-    strategy:
-      matrix:
-        python-version: ["3.12"]
+    name: Build Windows x64 Executable
+    outputs:
+      upload-name: PasswordManager-${{ env.VERSION }}-windows-x64.exe
+      upload-path: dist/PasswordManager.exe
 
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Setup Python
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install system dependencies (Windows)
-      run: |
-        choco install upx -y
+        python-version: '3.12'
+        architecture: 'x64'
 
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install PyQt6 cryptography mysql-connector-python pillow pyinstaller
-        pip list
+        pip install -r requirements.txt
+        pip install pyinstaller pillow
 
-    - name: Build Windows EXE (x86_64)
+    - name: Build Windows executable
       run: |
-        # 清理构建目录
-        Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
-        
-        # 检查图标文件
-        $iconFile = "resources/icons/favicon.ico"
-        if (-Not (Test-Path $iconFile)) {
-            $iconFile = "resources/icons/favicon.png"
+        python build_exe.py --windows
+        # 重命名输出文件
+        if (Test-Path "dist/PasswordManager.exe") {
+          Move-Item "dist/PasswordManager.exe" "dist/PasswordManager-${{ env.VERSION }}-windows-x64.exe"
         }
-        
-        # 构建参数
-        $pyinstallerArgs = @(
-            'main.py',
-            '--name=PasswordManager',
-            '--windowed',
-            '--clean',
-            '--onefile',
-            '--add-data=resources;resources',
-            '--add-data=config.json;.',
-            '--add-data=*.db;.',
-            '--hidden-import=cryptography',
-            '--hidden-import=cryptography.hazmat.backends.openssl',
-            '--hidden-import=mysql.connector',
-            '--hidden-import=PyQt6',
-            '--hidden-import=PIL',
-            '--hidden-import=PIL.Image',
-            '--hidden-import=PIL.ImageFile',
-            '--hidden-import=PIL._imaging',
-            '--exclude-module=tkinter'
-        )
-        
-        if (Test-Path $iconFile) {
-            $pyinstallerArgs += "--icon=$iconFile"
-        }
-        
-        Write-Output "构建参数:"
-        foreach ($arg in $pyinstallerArgs) {
-            Write-Output "  $arg"
-        }
-        
-        # 执行构建
-        python -m PyInstaller @pyinstallerArgs
-        
-        # 重命名
-        Move-Item "dist/PasswordManager.exe" "dist/PasswordManager-windows-x86_64.exe"
 
     - name: Upload Windows artifact
       uses: actions/upload-artifact@v4
       with:
-        name: windows-x86_64-exe
-        path: dist/PasswordManager-windows-x86_64.exe
+        name: windows-x64
+        path: |
+          dist/PasswordManager-${{ env.VERSION }}-windows-x64.exe
+        retention-days: 7
 
-  build-linux-arm64-appimage:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12"]
+  build-linux-arm64-qt5:
+    if: ${{ env.BUILD_ARM64_QT5 == 'true' }}
+    runs-on: ubuntu-latest  # 使用x64主机运行ARM容器
+    name: Build Linux ARM64 Qt5 AppImage
+    container:
+      image: arm64v8/debian:buster-slim
+      options: --privileged  # 需要特权模式运行fuse
+    outputs:
+      upload-name: PasswordManager-${{ env.VERSION }}-linux-arm64-qt5.AppImage
+      upload-path: PasswordManager-${{ env.VERSION }}-linux-arm64-qt5.AppImage
 
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install system dependencies for ARM64 cross-compilation
+    - name: Install system dependencies (ARM64 Debian Buster)
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          libssl-dev \
+        apt-get update
+        apt-get install -y \
+          python3 \
+          python3-pip \
+          vim \
+          python3-pyqt5 \
+          pyqt5-dev \
+          libmariadb-dev-compat \
           libffi-dev \
-          python3-dev \
-          upx \
+          libjpeg-dev \
           wget \
           file \
-          desktop-file-utils \
-          libgirepository1.0-dev \
-          libcairo2-dev \
-          gir1.2-gtk-3.0 \
-          qemu-user-static \
-          binfmt-support \
-          crossbuild-essential-arm64
+          libfuse2 \
+          build-essential \
+          python3-dev \
+          libgl1-mesa-dev \
+          libgstreamer-plugins-base1.0-dev \
+          qt5-default \
+          qttools5-dev-tools
 
-    - name: Install Python dependencies for ARM64
+    - name: Upgrade build tools
       run: |
-        python -m pip install --upgrade pip
-        pip install PyQt6 cryptography mysql-connector-python pillow pyinstaller
-        pip list
+        pip3 install --upgrade pip setuptools wheel
 
-    - name: Build Linux ARM64 executable
+    - name: Install Python dependencies
       run: |
-        # 清理构建目录
-        rm -rf dist build __pycache__
-        
-        # 检查图标文件
-        ICON_FILE=""
-        if [ -f "resources/icons/favicon.png" ]; then
-          ICON_FILE="resources/icons/favicon.png"
-        elif [ -f "resources/icons/favicon.ico" ]; then
-          ICON_FILE="resources/icons/favicon.ico"
+        pip3 install \
+          altgraph==0.17.5 \
+          cairocffi==1.7.1 \
+          CairoSVG==2.8.2 \
+          cffi==2.0.0 \
+          cryptography==46.0.3 \
+          cssselect2==0.8.0 \
+          defusedxml==0.7.1 \
+          mysql==0.0.3 \
+          mysql-connector-python==9.5.0 \
+          mysqlclient==2.2.7 \
+          packaging==25.0 \
+          pillow==12.0.0 \
+          pycparser==2.23 \
+          pyinstaller==6.17.0 \
+          pyinstaller-hooks-contrib==2025.10 \
+          PyQt5==5.15.11 \
+          PyQt5-Qt5==5.15.2 \
+          PyQt5_sip==12.17.1 \
+          setuptools==80.9.0 \
+          tinycss2==1.5.1 \
+          webencodings==0.5.1
+
+    - name: Set Python 3 as default
+      run: |
+        update-alternatives --install /usr/bin/python python /usr/bin/python3 1
+
+    - name: Build Qt5 AppImage
+      run: |
+        python build_arm64_qt5.py
+        # 重命名输出文件
+        if [ -f "PasswordManager-arm64.AppImage" ]; then
+          mv "PasswordManager-arm64.AppImage" "PasswordManager-${{ env.VERSION }}-linux-arm64-qt5.AppImage"
         fi
-        
-        # 构建参数
-        PARAMS=(
-          'main.py'
-          '--name=PasswordManager'
-          '--windowed'
-          '--clean'
-          '--onefile'
-          '--add-data=resources:resources'
-          '--add-data=config.json:.'
-          '--add-data=*.db:.'
-          '--hidden-import=cryptography'
-          '--hidden-import=cryptography.hazmat.backends.openssl'
-          '--hidden-import=mysql.connector'
-          '--hidden-import=PyQt6'
-          '--hidden-import=PIL'
-          '--hidden-import=PIL.Image'
-          '--hidden-import=PIL.ImageFile'
-          '--hidden-import=PIL._imaging'
-          '--exclude-module=tkinter'
-        )
-        
-        if [ -n "$ICON_FILE" ]; then
-          PARAMS+=("--icon=$ICON_FILE")
-        fi
-        
-        echo "构建参数:"
-        printf '  %s\n' "${PARAMS[@]}"
-        
-        # 使用 aarch64-linux-gnu-gcc 进行交叉编译
-        export CC=aarch64-linux-gnu-gcc
-        export CXX=aarch64-linux-gnu-g++
-        
-        # 执行构建
-        python -m PyInstaller "${PARAMS[@]}"
-        
-        echo "✅ Linux ARM64 可执行文件构建完成！"
-        
-        # 检查文件架构
-        file dist/PasswordManager
 
-    - name: Prepare AppDir structure
-      run: |
-        # 创建 AppDir 结构
-        mkdir -p PasswordManager.AppDir/usr/bin
-        mkdir -p PasswordManager.AppDir/usr/lib
-        mkdir -p PasswordManager.AppDir/usr/share/applications
-        mkdir -p PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps
-        
-        # 复制可执行文件
-        cp dist/PasswordManager PasswordManager.AppDir/usr/bin/
-        chmod +x PasswordManager.AppDir/usr/bin/PasswordManager
-        
-        # 复制图标
-        if [ -f "resources/icons/favicon.png" ]; then
-          cp resources/icons/favicon.png PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps/passwordmanager.png
-        elif [ -f "resources/icons/favicon.ico" ]; then
-          # 转换 ICO 到 PNG（如果需要）
-          sudo apt-get install -y imagemagick
-          convert resources/icons/favicon.ico[0] PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps/passwordmanager.png
-        else
-          # 创建占位符图标
-          convert -size 256x256 xc:#4A90E2 -fill white -pointsize 72 -gravity center -draw "text 0,0 '🔐'" PasswordManager.AppDir/usr/share/icons/hicolor/256x256/apps/passwordmanager.png
-        fi
-        
-        # 复制资源文件
-        mkdir -p PasswordManager.AppDir/usr/share/passwordmanager
-        cp -r resources PasswordManager.AppDir/usr/share/passwordmanager/
-        cp config.json PasswordManager.AppDir/usr/share/passwordmanager/ 2>/dev/null || true
-
-    - name: Create .desktop file
-      run: |
-        echo '[Desktop Entry]' > PasswordManager.AppDir/passwordmanager.desktop
-        echo 'Type=Application' >> PasswordManager.AppDir/passwordmanager.desktop
-        echo 'Name=Password Manager' >> PasswordManager.AppDir/passwordmanager.desktop
-        echo 'GenericName=Password Manager' >> PasswordManager.AppDir/passwordmanager.desktop
-        echo 'Comment=A secure password manager application' >> PasswordManager.AppDir/passwordmanager.desktop
-        echo 'Icon=passwordmanager' >> PasswordManager.AppDir/passwordmanager.desktop
-        echo 'Exec=passwordmanager' >> PasswordManager.AppDir/passwordmanager.desktop
-        echo 'Categories=Utility;Security;Settings' >> PasswordManager.AppDir/passwordmanager.desktop
-        echo 'Terminal=false' >> PasswordManager.AppDir/passwordmanager.desktop
-        echo 'StartupNotify=true' >> PasswordManager.AppDir/passwordmanager.desktop
-
-    - name: Create AppRun launcher
-      run: |
-        echo '#!/bin/bash' > PasswordManager.AppDir/AppRun
-        echo 'HERE="$(dirname "$(readlink -f "${0}")")"' >> PasswordManager.AppDir/AppRun
-        echo 'export PATH="${HERE}/usr/bin:${PATH}"' >> PasswordManager.AppDir/AppRun
-        echo 'export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"' >> PasswordManager.AppDir/AppRun
-        echo 'export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS}"' >> PasswordManager.AppDir/AppRun
-        echo '' >> PasswordManager.AppDir/AppRun
-        echo '# 设置资源路径' >> PasswordManager.AppDir/AppRun
-        echo 'export RESOURCE_PATH="${HERE}/usr/share/passwordmanager/resources"' >> PasswordManager.AppDir/AppRun
-        echo 'export CONFIG_PATH="${HERE}/usr/share/passwordmanager/config.json"' >> PasswordManager.AppDir/AppRun
-        echo '' >> PasswordManager.AppDir/AppRun
-        echo 'exec "${HERE}/usr/bin/PasswordManager"' >> PasswordManager.AppDir/AppRun
-        
-        chmod +x PasswordManager.AppDir/AppRun
-
-    - name: Download and use appimagetool
-      run: |
-        # 1. 修正图标位置：在正确的目录下创建图标链接
-        # 先进入AppDir目录，这样链接路径就简单了
-        cd PasswordManager.AppDir
-        if [ -f "usr/share/icons/hicolor/256x256/apps/passwordmanager.png" ]; then
-          # 在AppDir根目录创建指向内部图标文件的链接
-          ln -sf "usr/share/icons/hicolor/256x256/apps/passwordmanager.png" "passwordmanager.png"
-        fi
-        cd .. # 回到原目录
-
-        # 2. 下载 x86_64 版本的 appimagetool (因为Runner环境是x86_64)
-        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool-x86_64.AppImage
-        chmod +x appimagetool-x86_64.AppImage
-
-        # 3. 关键：使用环境变量 ARCH 来指定“目标架构”为 aarch64，然后运行 x86_64 的打包工具
-        # 这样工具就会为我们生成一个 aarch64 的 AppImage
-        ARCH=aarch64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run PasswordManager.AppDir
-
-        # 4. 重命名输出文件（通常生成的格式为“软件名-架构.AppImage”）
-        # 使用通配符匹配，并给出明确的最终文件名
-        mv Password_Manager-aarch64.AppImage PasswordManager-linux-arm64.AppImage 2>/dev/null || 
-          (echo "尝试匹配通用文件名..." && mv Password_Manager*.AppImage PasswordManager-linux-arm64.AppImage 2>/dev/null || 
-           mv PasswordManager*.AppImage PasswordManager-linux-arm64.AppImage)
-
-    - name: Upload Linux AppImage artifact
+    - name: Upload Qt5 artifact
       uses: actions/upload-artifact@v4
       with:
-        name: linux-arm64-appimage
-        path: PasswordManager-linux-arm64.AppImage
+        name: linux-arm64-qt5
+        path: |
+          PasswordManager-${{ env.VERSION }}-linux-arm64-qt5.AppImage
+        retention-days: 7
 
-  create-release:
-    runs-on: ubuntu-latest
-    needs: [build-windows-x86_64, build-linux-arm64-appimage]
-    if: startsWith(github.ref, 'refs/tags/')
+  build-linux-arm64-qt6:
+    if: ${{ env.BUILD_ARM64_QT6 == 'true' }}
+    runs-on: ubuntu-latest  # 使用x64主机运行ARM容器
+    name: Build Linux ARM64 Qt6 AppImage
+    container:
+      image: arm64v8/debian:bullseye-slim  # 使用较新版本以支持Qt6
+      options: --privileged
+    outputs:
+      upload-name: PasswordManager-${{ env.VERSION }}-linux-arm64-qt6.AppImage
+      upload-path: PasswordManager-${{ env.VERSION }}-linux-arm64-qt6.AppImage
 
     steps:
-    - name: Download Windows artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: windows-x86_64-exe
-        path: artifacts/windows
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-    - name: Download Linux AppImage artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: linux-arm64-appimage
-        path: artifacts/linux
-
-    - name: Display file information
+    - name: Install system dependencies (ARM64 Debian Bullseye)
       run: |
-        echo "=== 生成的文件 ==="
-        find artifacts -type f -exec ls -lh {} \;
-        echo "=== 文件详情 ==="
-        file artifacts/windows/* 2>/dev/null || true
-        file artifacts/linux/* 2>/dev/null || true
+        apt-get update
+        apt-get install -y \
+          python3 \
+          python3-pip \
+          wget \
+          file \
+          libfuse2 \
+          build-essential \
+          python3-dev \
+          libgl1-mesa-dev \
+          libgstreamer-plugins-base1.0-dev \
+          qt6-base-dev \
+          qt6-tools-dev \
+          qt6-tools-dev-tools \
+          libmariadb-dev-compat \
+          libffi-dev \
+          libjpeg-dev
 
-    - name: Create GitHub Release
+    - name: Upgrade build tools
+      run: |
+        pip3 install --upgrade pip setuptools wheel
+
+    - name: Install Python dependencies
+      run: |
+        pip3 install \
+          altgraph==0.17.5 \
+          cairocffi==1.7.1 \
+          CairoSVG==2.8.2 \
+          cffi==2.0.0 \
+          cryptography==46.0.3 \
+          cssselect2==0.8.0 \
+          defusedxml==0.7.1 \
+          mysql==0.0.3 \
+          mysql-connector-python==9.5.0 \
+          mysqlclient==2.2.7 \
+          packaging==25.0 \
+          pillow==12.0.0 \
+          pycparser==2.23 \
+          pyinstaller==6.17.0 \
+          pyinstaller-hooks-contrib==2025.10 \
+          PyQt6==6.5.0 \
+          setuptools==80.9.0 \
+          tinycss2==1.5.1 \
+          webencodings==0.5.1
+
+    - name: Set Python 3 as default
+      run: |
+        update-alternatives --install /usr/bin/python python /usr/bin/python3 1
+
+    - name: Build Qt6 AppImage
+      run: |
+        python build_arm64_qt6.py
+        # 重命名输出文件
+        if [ -f "PasswordManager-arm64.AppImage" ]; then
+          mv "PasswordManager-arm64.AppImage" "PasswordManager-${{ env.VERSION }}-linux-arm64-qt6.AppImage"
+        fi
+
+    - name: Upload Qt6 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-arm64-qt6
+        path: |
+          PasswordManager-${{ env.VERSION }}-linux-arm64-qt6.AppImage
+        retention-days: 7
+
+  create-release:
+    needs: [build-windows-x64, build-linux-arm64-qt5, build-linux-arm64-qt6]
+    if: always() && (needs.build-windows-x64.result == 'success' || needs.build-linux-arm64-qt5.result == 'success' || needs.build-linux-arm64-qt6.result == 'success')
+    runs-on: ubuntu-latest
+    name: Create Release
+    permissions:
+      contents: write  # 需要权限来创建发布版
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: List downloaded artifacts
+      run: |
+        echo "下载的构建产物:"
+        find . -name "*.exe" -o -name "*.AppImage" | xargs ls -lh
+
+    - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
-        name: Release ${{ github.ref_name }}
+        tag_name: ${{ env.VERSION }}
+        name: "Password Manager ${{ env.VERSION }}"
+        body: |
+          # Password Manager ${{ env.VERSION }}
+          
+          多平台构建版本，包含：
+          - Windows x86_64 可执行文件
+          - Linux ARM64 Qt5 AppImage
+          - Linux ARM64 Qt6 AppImage
+          
+          ## 使用说明
+          
+          ### Windows
+          - 下载 `PasswordManager-${{ env.VERSION }}-windows-x64.exe`
+          - 直接运行即可
+          
+          ### Linux ARM64
+          - 下载对应的AppImage文件
+          - 赋予执行权限：`chmod +x PasswordManager-*.AppImage`
+          - 直接运行：`./PasswordManager-*.AppImage`
+          
+          ## 构建环境
+          - Qt5 构建：arm64v8/debian:buster-slim (Python 3.7)
+          - Qt6 构建：arm64v8/debian:bullseye-slim
+          - 构建时间：${{ github.event.created_at }}
+          - 触发事件：${{ github.event_name }}
+          - 提交：${{ github.sha }}
         draft: false
         prerelease: false
-        generate_release_notes: true
         files: |
-          artifacts/windows/PasswordManager-windows-x86_64.exe
-          artifacts/linux/PasswordManager-linux-arm64.AppImage
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          windows-x64/*.exe
+          linux-arm64-qt5/*.AppImage
+          linux-arm64-qt6/*.AppImage
+
+  notify-completion:
+    needs: [create-release]
+    runs-on: ubuntu-latest
+    name: Notify Completion
+    if: always()
+
+    steps:
+    - name: Build Status Summary
+      run: |
+        echo "构建完成状态报告" > $GITHUB_STEP_SUMMARY
+        echo "=================" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "## Windows x64 构建" >> $GITHUB_STEP_SUMMARY
+        echo "- 状态: ${{ needs.build-windows-x64.result || '未执行' }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "## Linux ARM64 Qt5 构建" >> $GITHUB_STEP_SUMMARY
+        echo "- 状态: ${{ needs.build-linux-arm64-qt5.result || '未执行' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- 容器: arm64v8/debian:buster-slim" >> $GITHUB_STEP_SUMMARY
+        echo "- Python: 3.7" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "## Linux ARM64 Qt6 构建" >> $GITHUB_STEP_SUMMARY
+        echo "- 状态: ${{ needs.build-linux-arm64-qt6.result || '未执行' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- 容器: arm64v8/debian:bullseye-slim" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "## 发布状态" >> $GITHUB_STEP_SUMMARY
+        echo "- 状态: ${{ needs.create-release.result || '未执行' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- 版本: ${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
